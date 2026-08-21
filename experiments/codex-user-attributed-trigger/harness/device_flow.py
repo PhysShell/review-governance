@@ -162,11 +162,12 @@ def run(client_id: str, deadline_ts: float, repository_id=None) -> int:
     while time.time() < deadline_ts:
         start = request_device_code(client_id, repository_id)
         if start.get("error") == "device_flow_disabled":
-            print("DEVICE_FLOW_DISABLED — enable it on the App first "
-                  "(Settings → Developer settings → GitHub Apps → "
-                  "physshell-review-governor → Optional features / "
-                  "'Enable Device Flow'). No other App setting may change.",
-                  file=sys.stderr)
+            print("DEVICE_FLOW_DISABLED — enable it on the App first: "
+                  "https://github.com/settings/apps/physshell-review-governor "
+                  "→ General tab → section 'Identifying and authorizing users' "
+                  "→ checkbox 'Enable Device Flow' → Save changes. "
+                  "Leave 'Expire user authorization tokens' checked. "
+                  "No other App setting may change.", file=sys.stderr)
             return 4
         if "device_code" not in start:
             print(f"unexpected device/code response: {start}", file=sys.stderr)
