@@ -1,0 +1,47 @@
+{
+  "source": "live capture, probe PR #13 — observed absence of any CodeRabbit response to the App-authored command",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 13,
+  "request_comment_id": 5366982391,
+  "request_created_at": "2026-08-21T07:55:27Z",
+  "request_author": {
+    "login": "physshell-review-governor[bot]",
+    "id": 319376779,
+    "type": "Bot"
+  },
+  "observation_windows": [
+    {
+      "label": "primary",
+      "first_poll": "2026-08-21T07:55:37Z",
+      "last_poll": "2026-08-21T08:26:06Z",
+      "polls": 38
+    },
+    {
+      "label": "extension",
+      "first_poll": "2026-08-21T08:26:53Z",
+      "last_poll": "2026-08-21T08:56:57Z",
+      "polls": 29
+    }
+  ],
+  "signals_observed": {
+    "reactions_on_request": 0,
+    "issue_comments": 0,
+    "reviews": 0,
+    "review_comments": 0,
+    "summary_comment_edits": 0
+  },
+  "classification_per_protocol": "NO_OBSERVED_START",
+  "matched_control": {
+    "comment_id": 5367779912,
+    "author": {
+      "login": "PhysShell",
+      "id": 45852143,
+      "type": "User"
+    },
+    "created_at": "2026-08-21T08:57:57Z",
+    "handled_in_seconds": 5,
+    "ack_comment_id": 5367780817,
+    "same_head": "3b022724d737feeae0a89e0450e6ea11f949d2e3",
+    "same_draft_state": true
+  }
+}

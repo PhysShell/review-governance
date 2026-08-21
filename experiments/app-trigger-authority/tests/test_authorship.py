@@ -67,6 +67,20 @@ def test_provider_response_is_neither_trigger_nor_app_authored():
                       "is_app_authored_trigger": False}
 
 
+def test_human_control_same_text_is_not_app_trigger():
+    result = classify_fixture(load("user_request_coderabbit_control.json"))
+    assert result["trigger_for"] == "coderabbit"
+    assert result["is_app_authored"] is False
+    assert result["is_app_authored_trigger"] is False
+
+
+def test_coderabbit_ack_is_neither_trigger_nor_app_authored():
+    fixture = load("coderabbit_response_human_control_ack.json")["response"]
+    result = classify_fixture(fixture)
+    assert result == {"trigger_for": None, "is_app_authored": False,
+                      "is_app_authored_trigger": False}
+
+
 def test_wrong_numeric_id_fails_even_with_matching_login_and_type():
     fixture = copy.deepcopy(load("app_request_codex.json"))
     fixture["request_comment"]["user"]["id"] += 1
