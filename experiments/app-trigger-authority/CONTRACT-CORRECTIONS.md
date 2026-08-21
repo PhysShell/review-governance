@@ -41,9 +41,18 @@ permission; `issues: write` covers comments on plain issues only. The
 before/after pair above is the causal evidence (same endpoint, same token
 transport, only the permission changed).
 
-**Design consequence.** The minimal App permission set for App-authored PR
-trigger comments is `metadata: read` + `pull_requests: read & write`.
-`issues: write` is demonstrably insufficient for this function and not
-required by it; it stays granted for now and is to be revisited at the next
-stage. `checks: write` remains reserved for A2. `statuses` remains
-not granted.
+**Design consequence — with epistemic status per claim.**
+
+- `pull_requests: write` **was required** for this operation to succeed in
+  the tested configuration — EMPIRICAL (the causal pair above).
+- `issues: write` **is insufficient** for PR issue-comments — EMPIRICAL
+  (it was granted at the time of the 403).
+- `issues: write` **is unnecessary** for PR issue-comments — DOCUMENTED +
+  consistent with experiment, but NOT experimentally established: the
+  permission was never removed in a subtraction test. GitHub's permission
+  reference maps "create issue comment on a PR" to the Pull requests
+  permission; the experiment is consistent with that, no more.
+
+`issues: write` stays granted for now (minimization is a possible later
+test; permissions are not touched again in A1). `checks: write` remains
+reserved for A2. `statuses` remains not granted.

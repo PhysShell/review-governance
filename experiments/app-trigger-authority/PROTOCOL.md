@@ -163,3 +163,71 @@ experiment first. Neither is part of A1.
   Evidence and causal before/after pair: `CONTRACT-CORRECTIONS.md`.
   Estimands unaffected (no trigger had been attempted successfully under
   the old permission set).
+
+- **A1-c2 (2026-08-21, mid-observation — after the Codex observation, before
+  any CodeRabbit classification and before the final verdict; interpretation
+  model refined on owner direction):**
+
+  1. **Codex is scored on three axes, not one.** `command recognized` /
+     `review authorized` / `terminal review`. Observed: `YES / NO / NO` —
+     five seconds after the App-authored command, provider actor `199175422`
+     returned the no-start response "create a Codex account and connect to
+     github". Recorded as two separate results, more important than any
+     aggregate:
+
+     ```text
+     CODEX_APP_COMMAND_ROUTING:  PASS
+     CODEX_APP_REVIEW_AUTHORITY: FAIL
+     ```
+
+     Calibrated inference only: *in this observed request, Codex resolved
+     the requesting actor and refused to start; Codex review authorization
+     appears requester-identity-bound.* No claim is made about Codex's
+     universal internal contract.
+
+  2. **Verdict ceiling.** The Governor's architectural goal is to *initiate*
+     reviews, not to elicit polite refusals. Since App installation identity
+     is already proven insufficient to authorize a Codex review,
+     `APP_TRIGGER_AUTHORITY` cannot be `PASS` regardless of the CodeRabbit
+     outcome; the maximum is `PARTIAL`.
+
+  3. **CodeRabbit draft confounder + matched positive control.** Probe
+     PR #13 is a draft, and CodeRabbit's pre-trigger auto-comment already
+     states "Review skipped / Draft detected". App-authored silence is
+     therefore confounded (two variables: actor = App, PR state = draft).
+     If the App observation window (30 + 30 min) ends with zero CodeRabbit
+     signals, run exactly one matched positive control **after** the App
+     window: a human/OAuth-authored `@coderabbitai full review` on the same
+     PR, same unchanged HEAD, same draft state. Interpretation:
+
+     ```text
+     App silent + human handled  => evidence for App-author rejection
+     App silent + human silent   => INCONCLUSIVE (draft/provider state
+                                    remains a confounder)
+     App handled                 => App command authority PASS,
+                                    independent of CLEAN/FINDINGS/RATE_LIMITED
+     ```
+
+     A human-control `RATE_LIMITED` still counts as provider handling
+     evidence. HEAD must not change and the PR must not leave draft between
+     the App probe and the control.
+
+  4. **Provider-gate normalization.** The observed Codex no-start response
+     normalizes to `COMMAND_HANDLED` + `REVIEW_UNAVAILABLE_FOR_REQUESTOR`,
+     gate state `UNAVAILABLE` — never `CLEAN`. "Failed to start a review"
+     must never read as a passing gate. Regression-tested against the real
+     fixture (`harness/provider_gate.py`, `tests/`).
+
+  5. **Permission-correction epistemic status.** The A1-c1 causal pair
+     proves that `pull_requests: write` was required for the operation to
+     succeed *in the tested configuration*. It does **not** prove that the
+     Issues permission is unnecessary — `issues: write` was never removed.
+     Non-necessity is `DOCUMENTED + consistent with experiment` (GitHub
+     permission reference), not an empirical subtraction result. A
+     minimization test may happen later; permissions are not touched again
+     in A1.
+
+  6. **Next experiment naming.** `A1b: Codex user-attributed trigger
+     authority` — candidate mechanism: GitHub App user authorization /
+     user access token. Design only; not implemented in A1. A2 remains
+     unstarted.
