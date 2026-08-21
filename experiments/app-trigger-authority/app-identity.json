@@ -1,0 +1,28 @@
+{
+  "captured_at": "2026-08-21T07:48:43Z",
+  "app_id": 4669438,
+  "app_slug": "physshell-review-governor",
+  "app_name": "physshell-review-governor",
+  "owner": {
+    "login": "PhysShell",
+    "id": 45852143
+  },
+  "installation_id": 155393018,
+  "installation_account": {
+    "login": "PhysShell",
+    "id": 45852143
+  },
+  "repository_selection": "selected",
+  "repositories": [
+    "PhysShell/evm-from-scratch"
+  ],
+  "permissions_granted": {
+    "checks": "write",
+    "issues": "write",
+    "metadata": "read",
+    "pull_requests": "write"
+  },
+  "bot_login": "physshell-review-governor[bot]",
+  "bot_user_id": 319376779,
+  "bot_user_type": "Bot"
+}

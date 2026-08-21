@@ -17,14 +17,16 @@ before machinery.
 PR #12 is an evidence baseline, not a working branch. Experiments here may
 read it, never write to it.
 
-## Active experiment
+## Experiments
 
-- **A1 — App-authored provider trigger authority** —
-  [`experiments/app-trigger-authority/PROTOCOL.md`](experiments/app-trigger-authority/PROTOCOL.md)
-  (branch `experiment/app-trigger-authority`).
-  Question: do Codex and CodeRabbit accept review triggers when the issue
-  comment is authored by a GitHub App installation identity instead of a
-  human/OAuth user?
+- **A1 — App-authored provider trigger authority** — **COMPLETE:
+  `APP_TRIGGER_AUTHORITY: PARTIAL`**
+  (`CODEX_APP_COMMAND_ROUTING: PASS`, `CODEX_APP_REVIEW_AUTHORITY: FAIL`,
+  `CODERABBIT_APP_COMMAND_ROUTING: FAIL` by matched control).
+  Protocol: [`experiments/app-trigger-authority/PROTOCOL.md`](experiments/app-trigger-authority/PROTOCOL.md) ·
+  Report: [`docs/experiments/app-trigger-authority.md`](docs/experiments/app-trigger-authority.md).
+- **A1b — Codex user-attributed trigger authority** — next; design only,
+  not started.
 
 ## Environment
 

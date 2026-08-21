@@ -1,0 +1,32 @@
+{
+  "captured_at": "2026-08-21T07:48:48Z",
+  "purpose": "identity-probe",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 13,
+  "pr_at_request": {
+    "number": 13,
+    "state": "open",
+    "draft": true,
+    "head_sha": "3b022724d737feeae0a89e0450e6ea11f949d2e3",
+    "head_ref": "probe/app-trigger-authority",
+    "updated_at": "2026-08-21T07:44:28Z"
+  },
+  "request_comment": {
+    "id": 5366890619,
+    "body": "Governor App identity probe \u2014 no action requested. (ai-final-review Stage A1; request envelope captured in the control plane, PhysShell/review-governance.)",
+    "created_at": "2026-08-21T07:48:46Z",
+    "html_url": "https://github.com/PhysShell/evm-from-scratch/pull/13#issuecomment-5366890619",
+    "user": {
+      "login": "physshell-review-governor[bot]",
+      "id": 319376779,
+      "type": "Bot"
+    },
+    "performed_via_github_app": "physshell-review-governor"
+  },
+  "response_headers": {
+    "date": "Fri, 21 Aug 2026 07:48:46 GMT",
+    "x-github-request-id": "ADF9:14A6DE:27204C8:25EEC6C:6A8802DE",
+    "x-ratelimit-remaining": "4992"
+  },
+  "auth_transport": "github-app installation token (value withheld)"
+}
