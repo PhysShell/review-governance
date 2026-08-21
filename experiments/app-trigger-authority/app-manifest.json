@@ -1,0 +1,14 @@
+{
+  "name": "physshell-review-governor",
+  "description": "Private governor app for ai-final-review experiments. Stage A1: App-authored provider trigger authority.",
+  "url": "https://github.com/PhysShell/review-governance",
+  "public": false,
+  "redirect_url": "http://localhost:8917/callback",
+  "default_events": [],
+  "default_permissions": {
+    "metadata": "read",
+    "issues": "write",
+    "pull_requests": "read",
+    "checks": "write"
+  }
+}
