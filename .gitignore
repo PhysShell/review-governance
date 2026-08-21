@@ -1,0 +1,13 @@
+# secrets and derived credentials never enter the repo
+*.pem
+*.key
+.env
+
+# raw runtime captures live outside version control until sanitized into fixtures/
+.captures/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.direnv/
+result
