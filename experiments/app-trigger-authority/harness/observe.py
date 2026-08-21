@@ -84,7 +84,10 @@ def fetch_state(token, repo, pr, watch_ids) -> dict:
 
 
 def provider_signals(snap, watch, app_bot_login) -> dict:
-    hints = PROVIDER_HINTS[watch["provider"]]
+    # watch labels may carry a suffix (e.g. "coderabbit-human-control");
+    # hints resolve from the base provider name
+    base = watch["provider"].split("-")[0]
+    hints = PROVIDER_HINTS.get(base, (base,))
 
     def hinted(user):
         return any(h in (user.get("login") or "").lower() for h in hints)

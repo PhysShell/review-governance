@@ -1,0 +1,32 @@
+{
+  "captured_at": "2026-08-21T07:54:41Z",
+  "purpose": "codex",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 13,
+  "pr_at_request": {
+    "number": 13,
+    "state": "open",
+    "draft": true,
+    "head_sha": "3b022724d737feeae0a89e0450e6ea11f949d2e3",
+    "head_ref": "probe/app-trigger-authority",
+    "updated_at": "2026-08-21T07:48:46Z"
+  },
+  "request_comment": {
+    "id": 5366971213,
+    "body": "@codex review",
+    "created_at": "2026-08-21T07:54:40Z",
+    "html_url": "https://github.com/PhysShell/evm-from-scratch/pull/13#issuecomment-5366971213",
+    "user": {
+      "login": "physshell-review-governor[bot]",
+      "id": 319376779,
+      "type": "Bot"
+    },
+    "performed_via_github_app": "physshell-review-governor"
+  },
+  "response_headers": {
+    "date": "Fri, 21 Aug 2026 07:54:40 GMT",
+    "x-github-request-id": "ABBD:11B523:2550375:2418926:6A880440",
+    "x-ratelimit-remaining": "4969"
+  },
+  "auth_transport": "github-app installation token (value withheld)"
+}
