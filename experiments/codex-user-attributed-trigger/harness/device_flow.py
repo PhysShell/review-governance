@@ -77,16 +77,90 @@ def store_token(payload: dict, client_id: str) -> dict:
     }
 
 
+PENDING_PATH = CONFIG_DIR / "device-flow-pending.json"
+
+
+def request_device_code(client_id: str, repository_id=None) -> dict:
+    fields = {"client_id": client_id}
+    if repository_id:
+        # Attempted per protocol; the device-code endpoint documents no
+        # repository_id parameter, so whether it narrows anything is verified
+        # afterwards against /user/installations/*/repositories rather than
+        # assumed from a silent acceptance here.
+        fields["repository_id"] = str(repository_id)
+    return post_form(DEVICE_CODE_URL, fields)
+
+
+def wait_until_enabled(client_id: str, deadline_ts: float, repository_id=None) -> dict:
+    """Poll until Device Flow stops returning device_flow_disabled."""
+    announced = False
+    while time.time() < deadline_ts:
+        start = request_device_code(client_id, repository_id)
+        if start.get("error") != "device_flow_disabled":
+            return start
+        if not announced:
+            print("waiting: Device Flow still disabled on the App", flush=True)
+            announced = True
+        time.sleep(30)
+    return {"error": "wait_deadline_reached"}
+
+
+def store_pending(start: dict, client_id: str) -> dict:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    PENDING_PATH.write_text(json.dumps({
+        "device_code": start["device_code"],
+        "client_id": client_id,
+        "interval": start.get("interval", 5),
+        "expires_at": time.time() + int(start.get("expires_in", 900)),
+        "issued_at": utcnow(),
+    }, indent=2) + "\n")
+    os.chmod(PENDING_PATH, 0o600)
+    return {
+        "action_required": "authorize in a browser as PhysShell",
+        "verification_uri": start.get("verification_uri"),
+        "user_code": start.get("user_code"),
+        "expires_in_sec": start.get("expires_in"),
+        "issued_at": utcnow(),
+    }
+
+
+def poll_pending(deadline_ts: float) -> int:
+    pending = json.loads(PENDING_PATH.read_text())
+    interval = max(int(pending.get("interval", 5)), 5)
+    while time.time() < min(pending["expires_at"], deadline_ts):
+        time.sleep(interval)
+        payload = post_form(TOKEN_URL, {
+            "client_id": pending["client_id"],
+            "device_code": pending["device_code"],
+            "grant_type": GRANT,
+        })
+        err = payload.get("error")
+        if err == "authorization_pending":
+            continue
+        if err == "slow_down":
+            interval += int(payload.get("interval", 5)) or 5
+            continue
+        if err == "expired_token":
+            print("device code expired before authorization", file=sys.stderr)
+            return 7
+        if err == "access_denied":
+            print("ACCESS_DENIED — authorization was declined; that is a result, "
+                  "not an error to work around.", file=sys.stderr)
+            return 5
+        if err:
+            print(f"token endpoint error: {payload}", file=sys.stderr)
+            return 4
+        if "access_token" in payload:
+            PENDING_PATH.unlink(missing_ok=True)
+            print(json.dumps(store_token(payload, pending["client_id"]), indent=2))
+            return 0
+    print("device code expired before authorization", file=sys.stderr)
+    return 7
+
+
 def run(client_id: str, deadline_ts: float, repository_id=None) -> int:
     while time.time() < deadline_ts:
-        fields = {"client_id": client_id}
-        if repository_id:
-            # Attempted per protocol; the device-code endpoint documents no
-            # repository_id parameter, so whether it narrows anything is
-            # verified afterwards against /user/installations/*/repositories
-            # rather than assumed from a silent acceptance here.
-            fields["repository_id"] = str(repository_id)
-        start = post_form(DEVICE_CODE_URL, fields)
+        start = request_device_code(client_id, repository_id)
         if start.get("error") == "device_flow_disabled":
             print("DEVICE_FLOW_DISABLED — enable it on the App first "
                   "(Settings → Developer settings → GitHub Apps → "
@@ -144,10 +218,24 @@ def main() -> int:
                     help="total deadline; device codes are re-requested as they expire")
     ap.add_argument("--repository-id", type=int, default=None,
                     help="attempt to scope authorization to one repository")
+    ap.add_argument("--start-only", action="store_true",
+                    help="wait until Device Flow is enabled, emit one user_code, exit")
+    ap.add_argument("--resume", action="store_true",
+                    help="poll the pending device code until authorization")
     args = ap.parse_args()
+    deadline = time.time() + args.wait_min * 60
+    if args.resume:
+        return poll_pending(deadline)
     public = json.loads((CONFIG_DIR / "app-public.json").read_text())
     client_id = public["client_id"]
-    return run(client_id, time.time() + args.wait_min * 60, args.repository_id)
+    if args.start_only:
+        start = wait_until_enabled(client_id, deadline, args.repository_id)
+        if "device_code" not in start:
+            print(f"could not start device flow: {start}", file=sys.stderr)
+            return 4
+        print(json.dumps(store_pending(start, client_id), indent=2))
+        return 0
+    return run(client_id, deadline, args.repository_id)
 
 
 if __name__ == "__main__":

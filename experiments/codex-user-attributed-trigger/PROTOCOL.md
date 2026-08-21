@@ -58,6 +58,15 @@ Production enforcement: NOT READY
 
 CodeRabbit does not participate in A1b. A2 is not started.
 
+## Probe PR (frozen at creation)
+
+`PhysShell/evm-from-scratch` PR **#14**, draft, branch
+`probe/codex-user-attributed-trigger`, single file
+`governor/pilot/codex-user-attributed-probe.md`, frozen head
+`a4e756b0324e1bebd76a2476a684dfa753abca54`. Created with ordinary git/gh
+authority (only the *trigger* must be user-token-authored); HEAD and draft
+state stay unchanged for the duration; closed without merge afterwards.
+
 ## Authentication model
 
 The primary request **must** use a user-to-server token of the same App
