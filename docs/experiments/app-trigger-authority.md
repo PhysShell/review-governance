@@ -100,7 +100,8 @@ review for a user-authored trigger (PR #11, review `4989404627`,
   (primary polls `07:55:37Z`→`08:26:06Z`, 38 polls; extension
   `08:26:53Z`→`08:56:57Z`, 29 polls): no reaction on the request comment,
   no comment, no review, no inline comment, no rate-limit notice, and no
-  edit of the existing summary comment (`updated_at` unchanged).
+  edit of the existing sticky summary comment (`updated_at` still
+  `07:44:28Z` at the final extension poll `08:56:57Z`).
   Per protocol: `NO_OBSERVED_START`.
 - `08:57:57Z` — **matched positive control** (A1-c2): identical text,
   same PR, same head `3b02272…`, same draft state, human author
@@ -109,9 +110,22 @@ review for a user-authored trigger (PR #11, review `4989404627`,
 - `08:58:02Z` — **5 seconds later** — `coderabbitai[bot]` (id `136622811`)
   acknowledged: "CodeRabbit review command invocation:
   `7e8c43b8-be68-4f6d-974c-0b6b80ed3447` / Action performed: Full review
-  triggered." (No review artifact yet as of the final snapshot `08:59:55Z`;
-  the acknowledgement is the handling evidence — review completion is not
-  required by the estimand.)
+  triggered." The acknowledgement is the handling evidence; review
+  completion is not required by the estimand.
+- `08:59:16Z` — **post-acknowledgement, context only.** The mutable sticky
+  summary comment (`5366833615`) was edited — its first edit of the entire
+  experiment: `updated_at` was still `07:44:28Z` at `08:56:57Z` (end of the
+  App window) and still `07:44:28Z` at `08:58:07Z` (one minute after the
+  human command), then changed ~79 s after that command. The rewritten body
+  reports "No actionable comments were generated in the recent review" over
+  the range `047ff1a6…` → `3b022724…`, and the earlier "Review skipped /
+  Draft detected" text is gone — the surface overwrote its own prior state
+  (preserved only in our fixtures). **No `pull_request_review` object was
+  emitted** (reviews list empty, verified locally at `08:59:55Z` and live
+  afterwards). This post-ack surface does not establish the CodeRabbit
+  `CLEAN` contract: mutable sticky comments are not accepted positive
+  evidence carriers — the disqualification predates this experiment
+  (PR #12 pilot) and is unchanged by it.
 
 Interpretation per the preregistered matrix: **App silent + human handled ⇒
 evidence for App-author rejection.** The matched control also shows the
@@ -126,7 +140,7 @@ Complete comment inventory of probe PR #13 at final reconciliation
 
 | # | comment id | author (numeric id) | created | role |
 |---|-----------|---------------------|---------|------|
-| 1 | 5366833615 | `coderabbitai[bot]` (136622811) | 07:44:28 | auto-summary, "Review skipped / Draft detected" (pre-trigger baseline) |
+| 1 | 5366833615 | `coderabbitai[bot]` (136622811) | 07:44:28 | mutable sticky auto-summary: "Review skipped / Draft detected" (pre-trigger baseline); **edited 08:59:16**, after the human control, to "No actionable comments were generated" — original text no longer retrievable on GitHub |
 | 2 | 5366890619 | `physshell-review-governor[bot]` (319376779) | 07:48:46 | App identity probe (benign, no mentions; triggered nothing) |
 | 3 | 5366971213 | `physshell-review-governor[bot]` (319376779) | 07:54:40 | App-authored `@codex review` |
 | 4 | 5366972130 | `chatgpt-codex-connector[bot]` (199175422) | 07:54:45 | Codex no-start response (+5 s) |
@@ -137,9 +151,13 @@ Complete comment inventory of probe PR #13 at final reconciliation
 Sanitized fixtures (no tokens/JWTs/auth headers):
 `experiments/app-trigger-authority/fixtures/` — App request envelopes
 (identity probe, codex, coderabbit), Codex no-start response, CodeRabbit
-draft-skip auto-summary, CodeRabbit non-response window summary, matched
-control envelope + acknowledgement, and user-authored negative controls
-sourced read-only from frozen PR #11. A1-c1 evidence:
+non-response window summary, matched control envelope + acknowledgement,
+and user-authored negative controls sourced read-only from frozen PR #11.
+The mutable sticky comment is preserved in **both** of its observed states —
+`coderabbit_auto_summary_draft_skip.json` (pre-trigger, the only surviving
+copy of the "Review skipped / Draft detected" text) and
+`coderabbit_sticky_after_human_control.json` (post-edit `08:59:16Z`) —
+precisely because that surface is not append-only. A1-c1 evidence:
 `CONTRACT-CORRECTIONS.md`. Raw observation snapshots exist locally
 (`.captures/`, gitignored); canonical artifacts live on GitHub under the
 comment ids above.
@@ -196,6 +214,13 @@ CodeRabbit).
   gave 403).
 - A "failed to start" provider response is representable and tested as
   `UNAVAILABLE` — it can never be conflated with `CLEAN`.
+- CodeRabbit's mutable sticky surface reports outcomes its
+  machine-authoritative carrier does not: at `08:59:16Z` the sticky claimed
+  "No actionable comments were generated" for a specific commit range while
+  the `pull_request_review` list stayed empty, and the same edit destroyed
+  the surface's earlier content. This is a second, independent reason to
+  keep sticky comments disqualified as `CLEAN` carriers: they are neither
+  authoritative nor append-only.
 
 ## What this DOES NOT prove
 
@@ -210,7 +235,9 @@ CodeRabbit).
   `NOT_READY_FOR_ENFORCEMENT`. No webhook, check-run, ruleset, or rollout
   work was done or validated.
 - Not the CodeRabbit control's review *outcome* (CLEAN/FINDINGS) — the
-  window closed after the acknowledgement; the estimand did not require it.
+  estimand was satisfied by acknowledgement; a later mutable summary
+  reported no actionable comments, but no accepted terminal `CLEAN` carrier
+  was observed.
 
 ## Architectural consequence
 
@@ -236,4 +263,33 @@ A1b: Codex user-attributed trigger authority
 
 A2 (installation webhook → signed delivery → `synchronize` → STALE epochs →
 Governor-owned non-required check run → exact HEAD binding) remains gated
-and unstarted, per the stop rule.
+and unstarted, per the stop rule. A1b runs first: CodeRabbit has already
+answered clearly (App author is not accepted), while for Codex there is a
+concrete candidate mechanism for crossing the boundary — which must now be
+either proven or killed by experiment.
+
+## Freeze status
+
+```text
+A1: COMPLETE
+APP_TRIGGER_AUTHORITY: PARTIAL
+
+Codex:
+  routing            PASS
+  App review auth    FAIL
+
+CodeRabbit:
+  App routing        FAIL
+
+Governor App:
+  coordinator        VIABLE
+  direct trigger ID  NOT VIABLE
+
+Production:
+  NOT READY
+```
+
+Frozen 2026-08-21 after one documentation-only correction (the
+post-acknowledgement sticky edit above). No conclusion changed. Evidence
+artifacts — probe PR #13 comments, this report, the fixtures — are
+read-only from here on; further work happens in new experiments.
