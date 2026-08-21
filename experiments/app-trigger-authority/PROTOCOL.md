@@ -153,3 +153,13 @@ Stop. `PASS` unlocks a separate Stage A2 (installation webhook → signed
 delivery → `synchronize` → STALE epochs → Governor-owned non-required check
 run → exact HEAD binding). `PARTIAL`/`FAIL` routes to an authority-design
 experiment first. Neither is part of A1.
+
+## Amendments
+
+- **A1-c1 (2026-08-21, pre-trigger):** Method step 1 listed
+  `pull_requests: read`. Empirically, creating issue comments **on pull
+  requests** is governed by the Pull requests permission, so the App was
+  upgraded to `pull_requests: read & write` before any trigger was posted.
+  Evidence and causal before/after pair: `CONTRACT-CORRECTIONS.md`.
+  Estimands unaffected (no trigger had been attempted successfully under
+  the old permission set).

@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-08-21T07:43:15Z",
+  "captured_at": "2026-08-21T07:48:43Z",
   "app_id": 4669438,
   "app_slug": "physshell-review-governor",
   "app_name": "physshell-review-governor",
@@ -20,7 +20,7 @@
     "checks": "write",
     "issues": "write",
     "metadata": "read",
-    "pull_requests": "read"
+    "pull_requests": "write"
   },
   "bot_login": "physshell-review-governor[bot]",
   "bot_user_id": 319376779,
