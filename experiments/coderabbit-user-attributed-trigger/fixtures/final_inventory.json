@@ -1,0 +1,55 @@
+{
+  "source": "live capture, probe PR #15 final reconciliation",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 15,
+  "frozen_head": "44ed22c487ae59528e0840e03ff983c6fea3bfcb",
+  "draft": true,
+  "reviews_present": 0,
+  "inline_comments_present": 0,
+  "issue_comments": [
+    {
+      "id": 5377728347,
+      "user": {
+        "login": "coderabbitai[bot]",
+        "id": 136622811,
+        "type": "Bot"
+      },
+      "created_at": "2026-08-22T03:55:48Z",
+      "performed_via_github_app": "coderabbitai",
+      "body_head": "<!-- This is an auto-generated comment: summarize by coderabbit.ai --> <!-- This is an auto-generated comment:"
+    },
+    {
+      "id": 5377728754,
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      },
+      "created_at": "2026-08-22T03:55:54Z",
+      "performed_via_github_app": "physshell-review-governor",
+      "body_head": "Governor user-attributed identity probe — no action requested. (ai-final-review Stage A1b-R; request envelope "
+    },
+    {
+      "id": 5377746719,
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      },
+      "created_at": "2026-08-22T04:00:31Z",
+      "performed_via_github_app": "physshell-review-governor",
+      "body_head": "@coderabbitai full review"
+    },
+    {
+      "id": 5377747235,
+      "user": {
+        "login": "coderabbitai[bot]",
+        "id": 136622811,
+        "type": "Bot"
+      },
+      "created_at": "2026-08-22T04:00:39Z",
+      "performed_via_github_app": "coderabbitai",
+      "body_head": "<!-- This is an auto-generated reply by CodeRabbit --> <!-- CodeRabbit review command invocation: 13b96ad7-d23"
+    }
+  ]
+}

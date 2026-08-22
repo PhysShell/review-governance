@@ -1,0 +1,41 @@
+{
+  "captured_at": "2026-08-22T03:31:47Z",
+  "auth_model": "github_app_user_access_token",
+  "token": {
+    "token_prefix": "ghu_",
+    "token_type": "bearer",
+    "expires_in_at_issue": 28800,
+    "refresh_token_issued": true,
+    "refresh_token_used_in_a1b": false,
+    "obtained_via": "github_app_device_flow",
+    "obtained_at": "2026-08-22T03:31:38Z",
+    "scope_field": ""
+  },
+  "user": {
+    "login": "PhysShell",
+    "id": 45852143,
+    "type": "User"
+  },
+  "governor_installation_visible_to_user_token": true,
+  "installation": {
+    "id": 155393018,
+    "app_id": 4669438,
+    "app_slug": "physshell-review-governor",
+    "repository_selection": "selected",
+    "permissions": {
+      "checks": "write",
+      "issues": "write",
+      "metadata": "read",
+      "pull_requests": "write"
+    }
+  },
+  "repositories_reachable_through_installation": [
+    "PhysShell/evm-from-scratch"
+  ],
+  "installations_total": 1,
+  "response_headers": {
+    "date": "Sat, 22 Aug 2026 03:31:45 GMT",
+    "x-github-request-id": "AC79:3F07F3:3980157:37DA4A7:6A891821",
+    "x-ratelimit-remaining": "4963"
+  }
+}
