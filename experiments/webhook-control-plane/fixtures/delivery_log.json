@@ -1,0 +1,187 @@
+{
+  "source": "live capture, A2a first-party receiver behind a Cloudflare Quick Tunnel",
+  "note": "signature values and the webhook secret never recorded; payloads reduced to identity/action/SHA fields",
+  "delivery_count": 10,
+  "deliveries": [
+    {
+      "received_at": "2026-08-22T04:51:23Z",
+      "delivery_id": "1f338de0-9de5-11f1-9777-3d1b45091eec",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "EVENT_IGNORED",
+      "event": "installation",
+      "action": "new_permissions_accepted",
+      "repo": null,
+      "pr": null,
+      "head_sha": null,
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:53:01Z",
+      "delivery_id": "59c57360-9de5-11f1-8397-4f72f9fe59fa",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "EVENT_IGNORED",
+      "event": "check_suite",
+      "action": "requested",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr": null,
+      "head_sha": null,
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:53:02Z",
+      "delivery_id": "59e92800-9de5-11f1-9a43-ba8527bbc4ec",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "EPOCH_OPENED head=add0a0975e stale_marked=0",
+      "event": "pull_request",
+      "action": "synchronize",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr": 8,
+      "head_sha": "add0a0975eb499491eefe9f83d971152153d8106",
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:53:24Z",
+      "delivery_id": "67a0a950-9de5-11f1-8aad-af1452e06652",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "EVENT_IGNORED",
+      "event": "check_suite",
+      "action": "requested",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr": null,
+      "head_sha": null,
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:53:25Z",
+      "delivery_id": "67b9af90-9de5-11f1-85a1-0c4c9dae5174",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "EPOCH_OPENED head=e4e07459ba stale_marked=0",
+      "event": "pull_request",
+      "action": "synchronize",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr": 17,
+      "head_sha": "e4e07459ba9a796f640a45c46f48ba829e6241de",
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:53:30Z",
+      "delivery_id": "6a9ad680-9de5-11f1-9b0c-7f0925daf480",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "PR_ACTION_IGNORED:edited",
+      "event": "pull_request",
+      "action": "edited",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr": 8,
+      "head_sha": "add0a0975eb499491eefe9f83d971152153d8106",
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:54:40Z",
+      "delivery_id": "944ad5c0-9de5-11f1-91e9-2ef4aa12fd77",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "EPOCH_OPENED head=0f8223447c stale_marked=1",
+      "event": "pull_request",
+      "action": "synchronize",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr": 17,
+      "head_sha": "0f8223447cdc8f849047eebb526dac641fe50bd5",
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:54:40Z",
+      "delivery_id": "946e3c40-9de5-11f1-99a3-47173444b4ff",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "EVENT_IGNORED",
+      "event": "check_suite",
+      "action": "requested",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr": null,
+      "head_sha": null,
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:55:24Z",
+      "delivery_id": "944ad5c0-9de5-11f1-91e9-2ef4aa12fd77",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": true,
+      "effect": "DUPLICATE_IGNORED",
+      "event": "pull_request",
+      "action": "synchronize",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr": 17,
+      "head_sha": "0f8223447cdc8f849047eebb526dac641fe50bd5",
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    },
+    {
+      "received_at": "2026-08-22T04:56:45Z",
+      "delivery_id": "df7ee55e-9de5-11f1-995c-748908a3cb8b",
+      "signature_present": true,
+      "signature_verified": true,
+      "duplicate": false,
+      "effect": "AUTH_LOST",
+      "event": "github_app_authorization",
+      "action": "revoked",
+      "repo": null,
+      "pr": null,
+      "head_sha": null,
+      "sender": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      }
+    }
+  ]
+}
