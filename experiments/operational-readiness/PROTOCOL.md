@@ -199,6 +199,142 @@ infrastructure this environment does not have is reported as `BLOCKED`
 with the reason, and blocks `READY_FOR_CUTOVER` rather than being waved
 through.
 
+## Amendment A5a-c1 — external failure domain (preregistered)
+
+Owner decisions taken after the A5a report, before any of the code below
+was written:
+
+```text
+DECISION 1  WEBHOOK TRANSPORT = stable HTTPS endpoint on a small dedicated VPS
+            not Quick Tunnel, not Funnel, not polling-only
+            polling REMAINS mandatory as reconciliation/fallback, but is no
+            longer the primary healthy-path detector
+
+DECISION 2  WATCHDOG runs on that same edge VPS
+            separate OS, network and failure domain from the primary
+            no user OAuth on the edge; failure-only capability
+```
+
+The reasoning is not primarily about webhooks: a second failure domain is
+needed for the watchdog regardless, and once that host exists a fixed HTTPS
+endpoint costs almost nothing on top.
+
+### Inverted heartbeat
+
+```text
+primary  --POST signed heartbeat every 15 s-->  edge
+edge stores last_primary_heartbeat (server time)
+heartbeat_age > 45 s  ->  the edge acts alone
+```
+
+The primary needs only outbound access, which it already has, and the
+watchdog never has to ask the primary whether it is dead — a question with
+a predictable answer rate.
+
+### GitHub as a cleanup surface, never as policy truth
+
+The watchdog does **not** read the primary's authoritative decision store.
+When the primary is stale it enumerates, from GitHub: open PRs on governed
+branches, their current heads, and check runs named `ai/final-review` owned
+by app `4669438`, and extinguishes any that are passing.
+
+```text
+FORBIDDEN  GitHub says success            => watchdog concludes policy SUCCESS
+PERMITTED  GitHub shows a passing Governor run AND the primary is
+           unavailable                    => watchdog destroys that authorization
+```
+
+The asymmetry is the whole licence: a false-positive revoke is safe, a
+false-positive success is not. Every watchdog operation is monotone in the
+safe direction.
+
+### Recovery after total loss of primary state
+
+```text
+new primary starts, durable policy state unavailable
+  -> DO NOT reconstruct SUCCESS from GitHub
+  -> every current head is NOT_ESTABLISHED
+  -> fresh provider qualification required
+```
+
+This keeps SQLite viable for now instead of turning A5 into an unplanned
+control-plane storage migration.
+
+### Edge storage (SQLite WAL is sufficient)
+
+```text
+webhook_deliveries   delivery_guid PK · event · action · received_at
+                     body_hash · processing_state
+primary_heartbeat    last_seen_at · primary_instance_id
+watchdog_incidents   incident_id · detected_at · stale_age
+                     affected_check_run_ids · revocation/readback results
+```
+
+Losing the edge database cannot manufacture a success, because no
+authoritative success is ever born there.
+
+### Webhook is a signal, not a second source of truth
+
+```text
+receive raw body -> verify HMAC -> durable commit of GUID + metadata -> 2xx
+webhook says      "something relevant changed"
+primary then       re-reads GitHub and derives the observation itself
+```
+
+### Degradation modes (webhook outage never opens the gate)
+
+```text
+WEBHOOK_HEALTHY   normal; reconciliation <= 30 s
+WEBHOOK_DOWN      polling-only degradation; gate stays active; detection SLO
+                  degrades to the poll interval; visible in health state
+PRIMARY_DOWN      watchdog revokes standing successes
+BOTH_DOWN         watchdog still revokes standing successes
+```
+
+Polling-only is an official degradation mode, not the production contract.
+A webhook outage requires no break-glass; it makes detection slower, not
+permissive.
+
+### Credential blast radius, stated plainly
+
+To patch its own App's check runs the edge needs App installation
+authority. On a compromised edge host, `WatchdogCapability` is a program
+boundary, not a cryptographic sandbox. This is recorded as a real risk and
+accepted for now because the alternative — user OAuth or `administration`
+on that host — is strictly worse. The edge holds: the webhook secret, App
+installation capability, and a heartbeat authentication secret. Nothing
+else.
+
+### A5a-c1 live qualification (runs once the VPS exists)
+
+```text
+1  edge healthy, stable public endpoint verified
+2  real signed GitHub delivery: HMAC PASS, durable-before-ACK PASS
+3  primary heartbeat healthy
+4  standing confirmed probe success
+5  kill primary HOST/process connectivity — not merely one Python loop
+6  edge watchdog independently detects > 45 s
+7  watchdog: GET exact run -> success->failure -> independent GET -> CONFIRMED
+8  merge attempt -> BLOCKED
+9  primary restored -> old success NOT restored
+10 intentionally drop one webhook delivery from processing
+11 reconciliation discovers the corresponding GitHub state within
+   <= 30 s + processing budget
+```
+
+Closing rows on success:
+
+```text
+STABLE_FIRST_PARTY_WEBHOOK_ENDPOINT   PASS
+WEBHOOK_DURABLE_BEFORE_ACK            PASS
+FAILED_DELIVERY_RECONCILIATION        PASS
+INDEPENDENT_FAILURE_DOMAIN_WATCHDOG   PASS
+=> A5_OPERATIONAL_READINESS: READY_FOR_CUTOVER
+```
+
+Until then A5a stays `BLOCKED`, and the architectural decision alone does
+not promote it.
+
 ## Forbidden
 
 Creating or requiring `ai/final-review`; any ruleset on `main`; touching
