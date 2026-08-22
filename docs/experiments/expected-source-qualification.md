@@ -127,19 +127,26 @@ enforces this structurally: its allowlist contains `/check-runs` and
 nothing else, and an attempted commit-status write raises rather than
 sending — asserted by test.
 
-## Residual state left behind, deliberately
+## Teardown appendix (owner-authorised, after the verdict)
+
+The fixture was retired before A4-live so that an enforcement-behaviour
+experiment cannot inherit a configuration-qualification artifact. Verdict
+unchanged.
 
 ```text
-ref     refs/heads/governor/a4a-expected-source-target   (created, unused)
-ruleset 21191731  active, matching that one ref, now with integration_id 4669438
-check   97011529988  Governor, failure, on 047ff1a6…
+09:43Z  DELETE ruleset 21191731        -> readback 404, repository inventory 0
+        DELETE refs/heads/governor/a4a-expected-source-target -> readback 404
+        check run 97011529988          -> PRESERVED
 ```
 
-The protocol preregistered leaving these in place. They match one dedicated
-empty ref, `main` is untouched and unprotected, and no PR is affected.
-Removal is one call — `DELETE /repos/PhysShell/evm-from-scratch/rulesets/21191731`
-plus deleting the ref — but that is a mutation, and the stop rule says the
-next mutation is the owner's decision.
+The check run is deliberately kept: it is commit-bound evidence, unaffected
+by deleting the ref, and erasing an experiment's history for tidiness is not
+a service to anybody. `main` was never targeted at any point.
+
+```text
+CURRENT_PERMISSION_EXPECTED_SOURCE: PASS
+A4a fixture: RETIRED
+```
 
 ## Result matrix
 
