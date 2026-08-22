@@ -1,0 +1,49 @@
+{
+  "published": true,
+  "projection_state": "CONFIRMED",
+  "decision_id": 1,
+  "check_run_id": 97008202609,
+  "head_sha": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+  "conclusion": "success",
+  "external_id": "epoch-42d70fbf63dd30bd",
+  "app": {
+    "id": 4669438,
+    "slug": "physshell-review-governor"
+  },
+  "bundle_hash_in_output": true,
+  "readback_status": 200,
+  "http_status": 200,
+  "pre_guard": {
+    "phase": "pre-publication",
+    "started_at": "2026-08-22T08:50:25Z",
+    "finished_at": "2026-08-22T08:50:28Z",
+    "passed": true,
+    "failures": [],
+    "head_at_guard": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+    "inventory_counts": {
+      "issue_comments": 7,
+      "reviews": 0,
+      "review_comments": 0
+    },
+    "newer_generations": {}
+  },
+  "post_guard": {
+    "phase": "post-publication",
+    "started_at": "2026-08-22T08:50:30Z",
+    "finished_at": "2026-08-22T08:50:33Z",
+    "passed": true,
+    "failures": [],
+    "head_at_guard": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+    "inventory_counts": {
+      "issue_comments": 7,
+      "reviews": 0,
+      "review_comments": 0
+    },
+    "newer_generations": {}
+  },
+  "timings": {
+    "pre_publish_validation_at": "2026-08-22T08:50:28Z",
+    "github_success_at": "2026-08-22T08:50:30Z",
+    "post_publish_validation_at": "2026-08-22T08:50:33Z"
+  }
+}

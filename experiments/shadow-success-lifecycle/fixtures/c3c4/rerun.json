@@ -1,0 +1,39 @@
+{
+  "rerun": true,
+  "decision_id": 2,
+  "ordering": {
+    "invalidation_decided_at": "2026-08-22T08:50:47Z",
+    "failure_patch_attempted_at": "2026-08-22T08:50:47Z",
+    "failure_confirmed_at": "2026-08-22T08:50:49Z",
+    "provider_request_created_at": "2026-08-22T08:50:49Z",
+    "monotonic_seconds": {
+      "invalidation_to_failure_confirmed": 2.207,
+      "failure_confirmed_to_provider_request": 1.434
+    }
+  },
+  "check_conclusion_before_request": "failure",
+  "projection_state": "CONFIRMED",
+  "request_outcome": "REQUEST_CREATED",
+  "request_comment_id": 5379406791,
+  "request_created_at": "2026-08-22T08:50:49Z",
+  "steps": [
+    {
+      "step": "durable_invalidation",
+      "at": "2026-08-22T08:50:47Z",
+      "decision_id": 2
+    },
+    {
+      "step": "check_failure_projection",
+      "at": "2026-08-22T08:50:49Z",
+      "patch_attempted_at": "2026-08-22T08:50:47Z",
+      "projection_state": "CONFIRMED",
+      "observed": "failure"
+    },
+    {
+      "step": "provider_request",
+      "started_at": "2026-08-22T08:50:49Z",
+      "at": "2026-08-22T08:50:50Z",
+      "outcome": "REQUEST_CREATED"
+    }
+  ]
+}

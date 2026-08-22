@@ -1,0 +1,15 @@
+{
+  "waited_seconds": 120,
+  "phase": "settling:bundle_1",
+  "started_at": "2026-08-22T08:50:21Z",
+  "finished_at": "2026-08-22T08:50:24Z",
+  "passed": true,
+  "failures": [],
+  "head_at_guard": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+  "inventory_counts": {
+    "issue_comments": 7,
+    "reviews": 0,
+    "review_comments": 0
+  },
+  "newer_generations": {}
+}
