@@ -1,0 +1,14 @@
+{
+  "http_status": 200,
+  "check_run_id": 96990553407,
+  "head_sha": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6",
+  "conclusion": "failure",
+  "status": "completed",
+  "app": {
+    "id": 4669438,
+    "slug": "physshell-review-governor"
+  },
+  "external_id": "epoch-26cd2742db0dab2c",
+  "internal_verdict": "SUCCESS_CANDIDATE",
+  "published_conclusion_is_failure_by_design": true
+}

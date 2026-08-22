@@ -1,0 +1,9 @@
+{
+  "evidence_hash": "4924f18a315bd71691edc3740a2089cd59b22c3f2af69434df6bcd97003d4263",
+  "decision": {
+    "verdict": "SUCCESS_CANDIDATE",
+    "reasons": [],
+    "publishable": false,
+    "note": "internal candidate only; publication is A3b"
+  }
+}
