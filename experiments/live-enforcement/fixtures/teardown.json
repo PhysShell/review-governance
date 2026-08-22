@@ -1,0 +1,23 @@
+{
+  "teardown_at": "2026-08-22T09:52:27Z",
+  "probe_prs_closed_without_merge": [
+    22,
+    23
+  ],
+  "pr_merged_into_isolated_ref_only": {
+    "pr": 24,
+    "merge_commit": "83bf2b79265d7f31dbd976a8cae8a7ad3f57719e",
+    "base": "refs/heads/governor/a4-enforcement-target"
+  },
+  "ruleset_deleted": 21192252,
+  "rulesets_remaining": 0,
+  "target_ref_deleted": "refs/heads/governor/a4-enforcement-target",
+  "ref_readback_status": 404,
+  "check_runs_preserved": [
+    97014507572,
+    97014645339,
+    97014701608
+  ],
+  "main_head_after": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+  "main_branch_protection": "none (404 Branch not protected)"
+}

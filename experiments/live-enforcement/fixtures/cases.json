@@ -1,0 +1,98 @@
+{
+  "cases": {
+    "case1_no_check": {
+      "pr": 23,
+      "head": "bd7b58aef37817a98df47bc3b647e3f512d7a7c9",
+      "state_before": "no check runs, no statuses",
+      "merge_http_status": 405,
+      "blocked": true,
+      "message": "Repository rule violations found \u2014 Required status check \"ai/final-review-enforcement-probe\" is expected."
+    },
+    "case2_governor_failure": {
+      "pr": 23,
+      "head": "bd7b58aef37817a98df47bc3b647e3f512d7a7c9",
+      "check_run_id": 97014507572,
+      "conclusion": "failure",
+      "merge_http_status": 405,
+      "blocked": true,
+      "message": "Required status check \"ai/final-review-enforcement-probe\" is failing."
+    },
+    "case3_wrong_source": {
+      "pr": 22,
+      "head": "23cb7b5eb0ad28e5d34586022797c9e491b9135c",
+      "foreign_artifact": "commit status by owner PhysShell, state success, same context",
+      "governor_check_runs": 0,
+      "merge_http_status": 405,
+      "blocked": true,
+      "message": "Required status check \"ai/final-review-enforcement-probe\" was not set by the expected GitHub app."
+    },
+    "case4a_stale_sha": {
+      "pr": 24,
+      "expected_sha_passed": "863017a445492c874bba5a69aec4637aeb0ecb03",
+      "actual_head": "885bf0d635d10af0ebeff609e484cf977540caff",
+      "merge_http_status": 409,
+      "blocked": true,
+      "message": "Head branch was modified. Review and try the merge again."
+    },
+    "case4b_old_head_success": {
+      "pr": 24,
+      "head": "885bf0d635d10af0ebeff609e484cf977540caff",
+      "success_exists_on": "863017a445492c874bba5a69aec4637aeb0ecb03 (previous head)",
+      "check_runs_on_current_head": 0,
+      "merge_http_status": 405,
+      "blocked": true,
+      "message": "Required status check \"ai/final-review-enforcement-probe\" is expected."
+    },
+    "case5_current_head_success": {
+      "pr": 24,
+      "head": "885bf0d635d10af0ebeff609e484cf977540caff",
+      "check_run_id": 97014701608,
+      "conclusion": "success",
+      "merge_state_status_before": "CLEAN",
+      "merged": true,
+      "merge_commit": "83bf2b79265d7f31dbd976a8cae8a7ad3f57719e",
+      "merged_into": "refs/heads/governor/a4-enforcement-target",
+      "performed_by": "owner (gh), never the Governor"
+    },
+    "case6_revoked_success": {
+      "pr": 23,
+      "head": "bd7b58aef37817a98df47bc3b647e3f512d7a7c9",
+      "check_run_id": 97014507572,
+      "sequence": [
+        "success CONFIRMED -> mergeStateStatus CLEAN (no merge attempted)",
+        "EVIDENCE_INVALIDATED -> failure CONFIRMED",
+        "merge attempt -> blocked"
+      ],
+      "merge_http_status": 405,
+      "blocked": true,
+      "message": "Required status check \"ai/final-review-enforcement-probe\" is failing."
+    }
+  },
+  "live_state": {
+    "captured_at": "2026-08-22T09:51:44Z",
+    "pr22": {
+      "base": "governor/a4-enforcement-target",
+      "head": "23cb7b5eb0ad28e5d34586022797c9e491b9135c",
+      "merged": false,
+      "number": 22,
+      "state": "open"
+    },
+    "pr23": {
+      "base": "governor/a4-enforcement-target",
+      "head": "bd7b58aef37817a98df47bc3b647e3f512d7a7c9",
+      "merged": false,
+      "number": 23,
+      "state": "open"
+    },
+    "pr24": {
+      "base": "governor/a4-enforcement-target",
+      "head": "885bf0d635d10af0ebeff609e484cf977540caff",
+      "merge_commit_sha": "83bf2b79265d7f31dbd976a8cae8a7ad3f57719e",
+      "merged": true,
+      "number": 24,
+      "state": "closed"
+    },
+    "main_head": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "target_head": "83bf2b79265d7f31dbd976a8cae8a7ad3f57719e"
+  }
+}

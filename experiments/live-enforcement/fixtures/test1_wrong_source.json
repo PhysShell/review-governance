@@ -1,0 +1,22 @@
+{
+  "case": "test1_wrong_source",
+  "attempted_at": "2026-08-22T09:47:25Z",
+  "pr_number": 22,
+  "head_sha": "23cb7b5eb0ad28e5d34586022797c9e491b9135c",
+  "governor_check_runs_on_head": 0,
+  "foreign_status": {
+    "context": "ai/final-review-enforcement-probe",
+    "state": "success",
+    "creator": "PhysShell",
+    "kind": "commit status (owner, outside Governor runtime)"
+  },
+  "merge_http_status": 405,
+  "merge_blocked": true,
+  "merge_error": "gh: Repository rule violations found\n\nRequired status check \"ai/final-review-enforcement-probe\" was not set by the expected GitHub app.\n\n (HTTP 405)",
+  "pr_state_after": {
+    "mergeStateStatus": "BLOCKED",
+    "mergeable": "MERGEABLE",
+    "mergedAt": null,
+    "state": "OPEN"
+  }
+}
