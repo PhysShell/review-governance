@@ -85,26 +85,8 @@ def main() -> int:
                   "refresh_fingerprint": creds.fingerprint(record["refresh_token"]),
                   "result": sanitized}
     elif args.installation:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2]
-                               / "codex-user-attributed-trigger" / "harness"))
-        import app_control_trigger as act  # self-contained JWT + install token
-        jwt = act.app_jwt(public["app_id"], public["pem_path"])
-        status, _, installs = act.request("GET", "/app/installations", jwt)
-        assert status == 200 and installs, (status, installs)
-        installation_id = installs[0]["id"]
-        status, _, minted = act.request(
-            "POST", f"/app/installations/{installation_id}/access_tokens", jwt)
-        token = minted["token"] if status == 201 else None
-        probe = act.request("GET", f"/repos/{args.repo}/pulls/{args.pr}", token) \
-            if token else (None, None, None)
-        result = {
-            "installation_id": installation_id,
-            "token_minted": status == 201,
-            "probe_status": probe[0],
-            "probe_pr": args.pr,
-            "probe_head_sha": (probe[2] or {}).get("head", {}).get("sha"),
-            "at": gh_probe.utcnow(),
-        }
+        import installation
+        result = installation.probe(args.repo, args.pr)
     else:
         ap.error("choose one of --refresh / --probe / --probe-refresh / "
                  "--installation")

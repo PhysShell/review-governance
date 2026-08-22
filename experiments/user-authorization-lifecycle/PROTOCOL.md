@@ -239,6 +239,45 @@ detection / Installation independence / Human recovery / Security review /
 Result / What this DOES prove / What this DOES NOT prove / Production
 consequence / Next gate.
 
+## Amendments
+
+- **A1c-c1 (2026-08-22, during Phase R, before any classification) — the
+  refresh rejection surface is generic, misleading, and returns HTTP 200.**
+
+  Observed on the live refresh endpoint:
+
+  ```text
+  04:15:36Z  refresh with G0.refresh (valid, unused)
+             -> HTTP 200, access_token present, pair rotated to G1
+
+  04:15:46Z  refresh with G0.refresh again (now consumed)
+             -> HTTP 200, no token, error "incorrect_client_credentials",
+                "The client_id and/or client_secret passed are incorrect."
+
+  04:16:19Z  control: never-issued refresh token, same client_id
+             -> HTTP 200, identical error, identical description
+  ```
+
+  Two consequences fixed here, before they can be smoothed over:
+
+  1. **The endpoint reports failure with HTTP 200.** Status-code-based
+     handling would read a rejected refresh as success. Only the presence
+     of `access_token` in the body distinguishes them; the harness keys on
+     exactly that.
+  2. **The error name accuses the wrong thing.** A consumed refresh token
+     and a never-issued one produce the same `incorrect_client_credentials`
+     — the preregistered expectation `bad_refresh_token` was not observed
+     at all. An operator or a worker reading that string would investigate
+     App client credentials while the actual cause is a rotated or invalid
+     refresh token. In the race scenario this is worse than noise: the
+     loser worker's evidence *points away* from "another worker rotated".
+
+  The reducer event is therefore named `refresh_rejected` (carrying the
+  observed error as data, never as a control-flow key), and the
+  preregistered invariant stands unchanged and reinforced: any refresh
+  rejection triggers a durable-generation re-read first, and never by
+  itself implies revocation.
+
 ## Forbidden in A1c
 
 Triggering Codex or CodeRabbit; building a production token daemon;

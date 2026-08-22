@@ -78,13 +78,19 @@ def reduce(state: State, event: dict, durable_generation: int) -> State:
         return State(AUTHORIZED_NEW_GENERATION, event["new_generation"],
                      "refresh rotated the pair")
 
-    if kind == "refresh_bad_refresh_token":
+    if kind == "refresh_rejected":
         # THE critical branch: re-read the durable generation first.
+        # The rejection surface is generic and misleading (observed:
+        # HTTP 200 with error `incorrect_client_credentials`, identical for
+        # a consumed token and a never-issued one — see A1c-c1), so this
+        # branch must never be reached by pattern-matching an error string
+        # or an HTTP status, and must never conclude revocation by itself.
         if durable_generation > state.generation:
             return State(AUTHORIZED_NEW_GENERATION, durable_generation,
                          "another worker rotated; adopting newer generation")
         return State(REAUTH_REQUIRED, state.generation,
-                     "refresh rejected and no newer durable generation exists")
+                     "refresh rejected and no newer durable generation exists: "
+                     f"{event.get('error', 'unspecified')}")
 
     if kind == "refresh_outcome_unknown":
         # Response lost/crash between GitHub accepting the refresh and the
