@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-08-22T05:18:17Z",
+  "receiver_running": false,
+  "tunnel_alive": false,
+  "deliveries_after_head_B_push": [],
+  "earlier_failed_deliveries": [
+    {
+      "guid": "137fe0f0-9de7-11f1-83cf-87ba5ea1d1ab",
+      "event": "pull_request",
+      "action": "closed",
+      "status": "Invalid HTTP Response: 401",
+      "at": "2026-08-22T05:05:22.659Z"
+    },
+    {
+      "guid": "f1043620-9de6-11f1-86f0-2b65f2923ab6",
+      "event": "pull_request",
+      "action": "edited",
+      "status": "Invalid HTTP Response: 401",
+      "at": "2026-08-22T05:04:25.232Z"
+    },
+    {
+      "guid": "0c240cde-9de5-11f1-9d7b-cd46290d15d8",
+      "event": "ping",
+      "action": null,
+      "status": "Invalid HTTP Response: 401",
+      "at": "2026-08-22T04:50:51.266Z"
+    }
+  ]
+}

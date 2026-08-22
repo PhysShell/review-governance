@@ -1,0 +1,24 @@
+{
+  "github_head": "11b0b5d143b3c787a543cb5d7c014a4ab629fd75",
+  "stored_head": "c9416bd778b0ec375c8b7e40470192d48f645894",
+  "actions": [
+    {
+      "epoch_stale": "epoch-ccab3cc4c15085e2"
+    },
+    {
+      "check_cancelled": 96985023054,
+      "http_status": 200,
+      "conclusion": "cancelled"
+    },
+    {
+      "epoch_opened": "epoch-a22f7efbe6ecfe9d",
+      "head": "11b0b5d143b3c787a543cb5d7c014a4ab629fd75",
+      "check_created": true
+    },
+    {
+      "verdict": "NOT_ESTABLISHED",
+      "conclusion": "failure"
+    }
+  ],
+  "changed": true
+}

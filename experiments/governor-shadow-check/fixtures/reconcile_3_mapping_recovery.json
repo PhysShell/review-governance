@@ -1,0 +1,13 @@
+{
+  "github_head": "11b0b5d143b3c787a543cb5d7c014a4ab629fd75",
+  "stored_head": "11b0b5d143b3c787a543cb5d7c014a4ab629fd75",
+  "actions": [
+    {
+      "noop": "stored head already current"
+    },
+    {
+      "check_mapping_recovered": 96985225301
+    }
+  ],
+  "changed": true
+}
