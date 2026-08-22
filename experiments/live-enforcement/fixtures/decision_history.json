@@ -1,0 +1,117 @@
+{
+  "chain": [
+    {
+      "decision_id": 1,
+      "epoch_id": "a4live-bd7b58aef378",
+      "head_sha": "bd7b58aef37817a98df47bc3b647e3f512d7a7c9",
+      "verdict": "NOT_ESTABLISHED",
+      "bundle_hash": "b1a78d2d4d5a0031dcbed1fbb67eeb6516ba1b1d79bcc27f36a9abbba3b2adf9",
+      "bundle_schema": "EnforcementProbeEvidence-v1",
+      "decision_rule_revision": "a4live.1",
+      "auth_generation": 3,
+      "cause": "case2 governor failure",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T09:49:08Z",
+      "previous_decision_id": null
+    },
+    {
+      "decision_id": 2,
+      "epoch_id": "a4live-bd7b58aef378",
+      "head_sha": "bd7b58aef37817a98df47bc3b647e3f512d7a7c9",
+      "verdict": "SUCCESS",
+      "bundle_hash": "5e1775f53557adffba13dc070dc1cf90c4a19d45e4538c2f95d38529fafab969",
+      "bundle_schema": "EnforcementProbeEvidence-v1",
+      "decision_rule_revision": "a4live.1",
+      "auth_generation": 3,
+      "cause": "case6 success",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T09:49:34Z",
+      "previous_decision_id": 1
+    },
+    {
+      "decision_id": 3,
+      "epoch_id": "a4live-bd7b58aef378",
+      "head_sha": "bd7b58aef37817a98df47bc3b647e3f512d7a7c9",
+      "verdict": "EVIDENCE_INVALIDATED",
+      "bundle_hash": "eadfb547f99b20e02eb4bb0508a86baa42b1f3f7f29677ca5c652d0267be6218",
+      "bundle_schema": "EnforcementProbeEvidence-v1",
+      "decision_rule_revision": "a4live.1",
+      "auth_generation": 3,
+      "cause": "case6 invalidation observed",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T09:49:37Z",
+      "previous_decision_id": 2
+    },
+    {
+      "decision_id": 4,
+      "epoch_id": "a4live-863017a44549",
+      "head_sha": "863017a445492c874bba5a69aec4637aeb0ecb03",
+      "verdict": "SUCCESS",
+      "bundle_hash": "9b6a693e573af6d937307a51a1ac19a6b0710b7ab26b69653bb26c1b6c7932a3",
+      "bundle_schema": "EnforcementProbeEvidence-v1",
+      "decision_rule_revision": "a4live.1",
+      "auth_generation": 3,
+      "cause": "case4 baseline success on old head",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T09:50:29Z",
+      "previous_decision_id": 3
+    },
+    {
+      "decision_id": 5,
+      "epoch_id": "a4live-885bf0d635d1",
+      "head_sha": "885bf0d635d10af0ebeff609e484cf977540caff",
+      "verdict": "SUCCESS",
+      "bundle_hash": "ea941c1efaf976415e30138005b004c59254cdabdde3ddac43ca71f9aa635ee6",
+      "bundle_schema": "EnforcementProbeEvidence-v1",
+      "decision_rule_revision": "a4live.1",
+      "auth_generation": 3,
+      "cause": "case5 success on current head",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T09:51:01Z",
+      "previous_decision_id": 4
+    }
+  ],
+  "projections": [
+    {
+      "epoch_id": "a4live-bd7b58aef378",
+      "head_sha": "bd7b58aef37817a98df47bc3b647e3f512d7a7c9",
+      "check_run_id": 97014507572,
+      "intended_conclusion": "failure",
+      "observed_conclusion": "failure",
+      "state": "CONFIRMED",
+      "decision_id": 3,
+      "attempted_at": "2026-08-22T09:49:37Z",
+      "confirmed_at": "2026-08-22T09:49:38Z",
+      "updated_at": "2026-08-22T09:49:38Z"
+    },
+    {
+      "epoch_id": "a4live-863017a44549",
+      "head_sha": "863017a445492c874bba5a69aec4637aeb0ecb03",
+      "check_run_id": 97014645339,
+      "intended_conclusion": "success",
+      "observed_conclusion": "success",
+      "state": "CONFIRMED",
+      "decision_id": 4,
+      "attempted_at": "2026-08-22T09:50:30Z",
+      "confirmed_at": "2026-08-22T09:50:31Z",
+      "updated_at": "2026-08-22T09:50:31Z"
+    },
+    {
+      "epoch_id": "a4live-885bf0d635d1",
+      "head_sha": "885bf0d635d10af0ebeff609e484cf977540caff",
+      "check_run_id": 97014701608,
+      "intended_conclusion": "success",
+      "observed_conclusion": "success",
+      "state": "CONFIRMED",
+      "decision_id": 5,
+      "attempted_at": "2026-08-22T09:51:02Z",
+      "confirmed_at": "2026-08-22T09:51:03Z",
+      "updated_at": "2026-08-22T09:51:03Z"
+    }
+  ]
+}
