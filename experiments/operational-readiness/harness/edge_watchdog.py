@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+"""Edge watchdog — the only writer on the edge host, and it only writes
+downward.
+
+It differs from the A5a in-host prototype in one decisive way: it does not
+read the primary's authoritative decision store. When the primary stops
+reporting, the watchdog enumerates from GitHub the open PRs on governed
+branches, their current heads, and the Governor's own check runs there, and
+extinguishes any that are passing.
+
+That is licensed by an asymmetry, not by trust:
+
+    FORBIDDEN   GitHub says success            => conclude policy SUCCESS
+    PERMITTED   GitHub shows a passing Governor run AND the primary is
+                unavailable                    => destroy that authorization
+
+Every operation available here is monotone in the safe direction. A
+false-positive revoke costs a review round; a false-positive success costs
+the entire point of the program.
+
+The edge holds no user OAuth credentials. On a compromised edge host the
+capability boundary below is a program, not a cryptographic sandbox — that
+risk is recorded in the protocol rather than implied away.
+"""
+import argparse
+import base64
+import datetime
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import edge_store
+
+API = "https://api.github.com"
+CONFIG_DIR = Path(os.environ.get(
+    "GOVERNOR_EDGE_CONFIG", os.path.expanduser("~/.config/review-governor-edge")))
+GOVERNOR_APP_ID = 4669438
+PRODUCTION_CONTEXT = "ai/final-review"
+STALE_AFTER_SECONDS = 45
+NON_PASSING = frozenset({"failure", "cancelled", "action_required", "timed_out"})
+PASSING = frozenset({"success", "neutral", "skipped"})
+CAUSE = "GOVERNOR_UNAVAILABLE"
+
+
+def utcnow():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class WatchdogCapability(Exception):
+    """Raised when the watchdog is asked to step outside its role."""
+
+
+def _b64(raw):
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+def app_jwt():
+    public = json.loads((CONFIG_DIR / "app-public.json").read_text())
+    now = int(time.time())
+    header = _b64(json.dumps({"alg": "RS256", "typ": "JWT"},
+                             separators=(",", ":")).encode())
+    payload = _b64(json.dumps({"iat": now - 60, "exp": now + 540,
+                               "iss": str(public["app_id"])},
+                              separators=(",", ":")).encode())
+    signing = f"{header}.{payload}".encode()
+    signature = subprocess.run(
+        ["openssl", "dgst", "-sha256", "-sign", str(public["pem_path"])],
+        input=signing, capture_output=True, check=True).stdout
+    return f"{signing.decode()}.{_b64(signature)}"
+
+
+def request(method, path, bearer, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Accept": "application/vnd.github+json",
+               "X-GitHub-Api-Version": "2022-11-28",
+               "User-Agent": "governor-edge-watchdog",
+               "Authorization": f"Bearer {bearer}"}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(API + path, method=method, data=data,
+                                 headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode()
+            return resp.status, (json.loads(raw) if raw else None)
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode()
+        try:
+            return e.code, json.loads(raw)
+        except ValueError:
+            return e.code, {"raw": raw[:400]}
+
+
+def guarded(method, path, bearer, body=None):
+    """The capability boundary, in code."""
+    if method == "GET":
+        return request(method, path, bearer, body)
+    if "/check-runs/" not in path:
+        raise WatchdogCapability(
+            f"edge watchdog may not write to {path}: only an existing "
+            "Governor check run may be patched")
+    if method != "PATCH":
+        raise WatchdogCapability(
+            f"edge watchdog may not {method} a check run: it may only patch "
+            "an existing one")
+    conclusion = (body or {}).get("conclusion")
+    if conclusion not in NON_PASSING:
+        raise WatchdogCapability(
+            f"edge watchdog may not set conclusion {conclusion!r}: it can "
+            "only revoke, never publish a passing state")
+    return request(method, path, bearer, body)
+
+
+def installation_token():
+    jwt = app_jwt()
+    status, installs = request("GET", "/app/installations", jwt)
+    assert status == 200 and installs, (status, installs)
+    status, minted = request(
+        "POST", f"/app/installations/{installs[0]['id']}/access_tokens", jwt)
+    assert status == 201, (status, minted)
+    return minted["token"]
+
+
+def heartbeat_age(store):
+    beat = store.latest_heartbeat()
+    if not beat:
+        return None, None
+    age = datetime.datetime.now(datetime.timezone.utc).timestamp() - \
+        beat["last_seen_epoch"]
+    return beat, age
+
+
+def passing_governor_runs(token, repo, branches, context=PRODUCTION_CONTEXT):
+    """Cleanup surface: what is currently green, according to GitHub.
+
+    Never interpreted as policy — only as "this authorization is visible and
+    must be destroyed while nobody is watching the evidence".
+    """
+    found = []
+    status, pulls = request(
+        "GET", f"/repos/{repo}/pulls?state=open&per_page=100", token)
+    if status != 200:
+        return found, {"error": f"cannot list pulls: {status}"}
+    for pull in pulls or []:
+        if branches and pull["base"]["ref"] not in branches:
+            continue
+        head = pull["head"]["sha"]
+        code, body = request(
+            "GET", f"/repos/{repo}/commits/{head}/check-runs?per_page=100",
+            token)
+        if code != 200:
+            continue
+        for run in (body or {}).get("check_runs", []):
+            app = run.get("app") or {}
+            if app.get("id") != GOVERNOR_APP_ID or run.get("name") != context:
+                continue
+            if run.get("conclusion") in PASSING:
+                found.append({"pr_number": pull["number"], "head_sha": head,
+                              "check_run_id": run["id"],
+                              "conclusion": run.get("conclusion")})
+    return found, None
+
+
+def revoke(token, repo, target, detected_at):
+    summary = "\n".join([
+        "Governor verdict: EVIDENCE_INVALIDATED",
+        f"Head: {target['head_sha']}",
+        f"Cause: {CAUSE}",
+        "",
+        "The primary Governor stopped reporting liveness, so nobody was "
+        "observing the providers' mutable evidence. This authorization is "
+        "revoked by the independent edge watchdog.",
+        "",
+        "A returning primary does not restore it: fresh qualification is "
+        "required.",
+    ])
+    status, _ = guarded(
+        "PATCH", f"/repos/{repo}/check-runs/{target['check_run_id']}", token,
+        {"status": "completed", "conclusion": "failure",
+         "completed_at": utcnow(),
+         "output": {"title": "Governor: EVIDENCE_INVALIDATED (edge watchdog)",
+                    "summary": summary}})
+    read_status, readback = guarded(
+        "GET", f"/repos/{repo}/check-runs/{target['check_run_id']}", token)
+    observed = (readback or {}).get("conclusion")
+    settled = ("CONFIRMED" if read_status == 200 and observed == "failure"
+               else "OUTCOME_UNKNOWN" if read_status != 200 else "FAILED")
+    return {**target, "patch_status": status, "observed": observed,
+            "state": settled, "detected_at": detected_at,
+            "revoked_at": utcnow()}
+
+
+def cmd_check(args):
+    store = edge_store.EdgeStore(args.db)
+    try:
+        beat, age = heartbeat_age(store)
+        stale = beat is None or age is None or age > args.stale_after
+        result = {"checked_at": utcnow(),
+                  "primary_instance_id": beat["primary_instance_id"] if beat else None,
+                  "heartbeat_age_seconds": None if age is None else round(age, 1),
+                  "stale_after_seconds": args.stale_after,
+                  "primary_stale": stale, "revocations": []}
+        if not stale:
+            return result
+        token = installation_token()
+        targets, error = passing_governor_runs(token, args.repo, args.branches)
+        result["passing_runs_found"] = targets
+        if error:
+            result["error"] = error
+            return result
+        if not targets:
+            return result
+        detected_at = utcnow()
+        result["revocations"] = [revoke(token, args.repo, t, detected_at)
+                                 for t in targets]
+        result["incident_id"] = store.open_incident(
+            detected_at=detected_at, stale_age=age or -1,
+            primary_instance_id=result["primary_instance_id"],
+            affected=[t["check_run_id"] for t in targets],
+            results=result["revocations"])
+        result["restores_automatically"] = False
+        return result
+    finally:
+        store.close()
+
+
+def cmd_watch(args):
+    deadline = time.time() + args.window
+    while time.time() < deadline:
+        result = cmd_check(args)
+        if result.get("revocations"):
+            return result
+        time.sleep(args.interval)
+    return {"checked_at": utcnow(), "primary_stale": False,
+            "note": "window elapsed without a stale primary"}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("command", choices=["check", "watch"])
+    ap.add_argument("--repo", default="PhysShell/evm-from-scratch")
+    ap.add_argument("--branches", nargs="*", default=["main"])
+    ap.add_argument("--db", default=str(CONFIG_DIR / "edge.sqlite3"))
+    ap.add_argument("--stale-after", type=int, default=STALE_AFTER_SECONDS)
+    ap.add_argument("--interval", type=int, default=10)
+    ap.add_argument("--window", type=int, default=600)
+    ap.add_argument("--out", default=None)
+    args = ap.parse_args()
+    result = {"check": cmd_check, "watch": cmd_watch}[args.command](args)
+    rendered = json.dumps(result, indent=2, default=str)
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered + "\n")
+    print(rendered)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
