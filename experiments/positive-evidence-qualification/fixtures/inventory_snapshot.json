@@ -1,0 +1,114 @@
+{
+  "source": "live inventory at qualification cutoff, probe PR #19",
+  "captured_at": "2026-08-22T06:06:05Z",
+  "head_at_capture": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6",
+  "issue_comments": [
+    {
+      "id": 5378210130,
+      "created_at": "2026-08-22T05:32:02Z",
+      "updated_at": "2026-08-22T06:05:01Z",
+      "user": {
+        "login": "coderabbitai[bot]",
+        "id": 136622811,
+        "type": "Bot"
+      },
+      "performed_via_github_app": {
+        "id": 347564,
+        "slug": "coderabbitai"
+      },
+      "body_head": "<!-- This is an auto-generated comment: summarize by coderabbit.ai --> <!-- review_stack_entry_start -->  [![Review Change Stack](https://storage.googleapis.com"
+    },
+    {
+      "id": 5378210601,
+      "created_at": "2026-08-22T05:32:10Z",
+      "updated_at": "2026-08-22T05:32:10Z",
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      },
+      "performed_via_github_app": {
+        "id": 4669438,
+        "slug": "physshell-review-governor"
+      },
+      "body_head": "@codex review"
+    },
+    {
+      "id": 5378210718,
+      "created_at": "2026-08-22T05:32:11Z",
+      "updated_at": "2026-08-22T05:32:11Z",
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      },
+      "performed_via_github_app": {
+        "id": 4669438,
+        "slug": "physshell-review-governor"
+      },
+      "body_head": "@coderabbitai full review"
+    },
+    {
+      "id": 5378211106,
+      "created_at": "2026-08-22T05:32:17Z",
+      "updated_at": "2026-08-22T05:32:22Z",
+      "user": {
+        "login": "coderabbitai[bot]",
+        "id": 136622811,
+        "type": "Bot"
+      },
+      "performed_via_github_app": {
+        "id": 347564,
+        "slug": "coderabbitai"
+      },
+      "body_head": "<!-- This is an auto-generated reply by CodeRabbit --> <!-- CodeRabbit review command invocation: 09d22001-b08c-4b58-9bf3-296aa02814f2 --> <details> <summary>\u26a0\ufe0f"
+    },
+    {
+      "id": 5378215113,
+      "created_at": "2026-08-22T05:33:19Z",
+      "updated_at": "2026-08-22T05:33:19Z",
+      "user": {
+        "login": "chatgpt-codex-connector[bot]",
+        "id": 199175422,
+        "type": "Bot"
+      },
+      "performed_via_github_app": {
+        "id": 1144995,
+        "slug": "chatgpt-codex-connector"
+      },
+      "body_head": "Codex Review: Didn't find any major issues. You're on a roll.  **Reviewed commit:** `a3274d7e72`  <details> <summary>\u2139\ufe0f About Codex in GitHub</summary> <br/>  ["
+    },
+    {
+      "id": 5378336975,
+      "created_at": "2026-08-22T06:03:31Z",
+      "updated_at": "2026-08-22T06:03:31Z",
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      },
+      "performed_via_github_app": {
+        "id": 4669438,
+        "slug": "physshell-review-governor"
+      },
+      "body_head": "@coderabbitai full review"
+    },
+    {
+      "id": 5378337442,
+      "created_at": "2026-08-22T06:03:37Z",
+      "updated_at": "2026-08-22T06:05:05Z",
+      "user": {
+        "login": "coderabbitai[bot]",
+        "id": 136622811,
+        "type": "Bot"
+      },
+      "performed_via_github_app": {
+        "id": 347564,
+        "slug": "coderabbitai"
+      },
+      "body_head": "<!-- This is an auto-generated reply by CodeRabbit --> <!-- CodeRabbit review command invocation: 0e1b343a-0091-4b99-8eb0-e82d2dcfc694 --> <details> <summary>\u2705 "
+    }
+  ],
+  "reviews": [],
+  "review_comments": []
+}

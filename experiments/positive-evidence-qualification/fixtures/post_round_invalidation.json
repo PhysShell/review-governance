@@ -1,0 +1,30 @@
+{
+  "bundle_head": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6",
+  "current_head": "1d1de2522a602f80f2c696f97d2b2eea931297f2",
+  "evidence_hash": "4924f18a315bd71691edc3740a2089cd59b22c3f2af69434df6bcd97003d4263",
+  "verdict_against_new_head": "STALE",
+  "verdict_reasons": [
+    "current head differs from the bundle head"
+  ],
+  "mutation_check": {
+    "stable": false,
+    "changes": [
+      "coderabbit: carrier body changed",
+      "coderabbit: carrier updated_at changed"
+    ],
+    "verdict": "INVALIDATED"
+  },
+  "verdict_if_auth_lost": "INVALIDATED",
+  "fresh_observations": {
+    "codex": {
+      "qualified": true,
+      "state": "CODEX_ADVISORY_POSITIVE",
+      "reasons": []
+    },
+    "coderabbit": {
+      "qualified": true,
+      "state": "CODERABBIT_ADVISORY_POSITIVE",
+      "reasons": []
+    }
+  }
+}

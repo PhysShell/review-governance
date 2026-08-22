@@ -1,0 +1,75 @@
+{
+  "bundle_version": "PositiveEvidenceBundle-v1",
+  "epoch_id": "epoch-26cd2742db0dab2c",
+  "epoch_generation": 1,
+  "head_sha": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6",
+  "auth_generation": 3,
+  "decision_rule_revision": "a3a.1",
+  "requests": {
+    "codex": {
+      "provider_request_id": "epoch-26cd2742db0dab2c:codex:g1",
+      "request_generation": 1,
+      "epoch_id": "epoch-26cd2742db0dab2c",
+      "auth_generation": 3,
+      "head_at_request": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6"
+    },
+    "coderabbit": {
+      "provider_request_id": "epoch-26cd2742db0dab2c:coderabbit:g2",
+      "request_generation": 2,
+      "epoch_id": "epoch-26cd2742db0dab2c",
+      "auth_generation": 3,
+      "head_at_request": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6"
+    }
+  },
+  "observations": {
+    "codex": {
+      "provider": "codex",
+      "state": "CODEX_ADVISORY_POSITIVE",
+      "qualified": true,
+      "reasons": [],
+      "request_comment_id": 5378210601,
+      "request_carrier": "app_mediated_user",
+      "terminal_comment": {
+        "id": 5378215113,
+        "created_at": "2026-08-22T05:33:19Z",
+        "updated_at": "2026-08-22T05:33:19Z",
+        "actor_id": 199175422,
+        "body_hash": "91e222993abc000925471c27556a9ded1c4014393d6c01dfe7a09d4af6194a43",
+        "attested_prefix": "a3274d7e72",
+        "resolved_full_sha": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6",
+        "carrier_kind": "mutable_advisory_carrier"
+      },
+      "findings_seen": {
+        "reviews": 0,
+        "inline": 0
+      }
+    },
+    "coderabbit": {
+      "provider": "coderabbit",
+      "state": "CODERABBIT_ADVISORY_POSITIVE",
+      "qualified": true,
+      "reasons": [],
+      "request_comment_id": 5378336975,
+      "request_carrier": "app_mediated_user",
+      "acknowledged": true,
+      "mutable_advisory_carrier": {
+        "id": 5378210130,
+        "created_at": "2026-08-22T05:32:02Z",
+        "updated_at": "2026-08-22T06:05:01Z",
+        "actor_id": 136622811,
+        "body_hash": "66f6902a8d6d5a18ee9961fb1de2e2ae9cf4f38c53e347e68c81bac1b42be3c4",
+        "review_range": {
+          "from": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+          "to": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6"
+        }
+      },
+      "findings_seen": {
+        "reviews": 0,
+        "inline": 0
+      },
+      "note": "check-run status is never used as cleanliness evidence"
+    }
+  },
+  "inventory_cutoff": "2026-08-22T06:06:05Z",
+  "evidence_hash": "4924f18a315bd71691edc3740a2089cd59b22c3f2af69434df6bcd97003d4263"
+}

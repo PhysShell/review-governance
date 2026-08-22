@@ -1,0 +1,25 @@
+{
+  "waited_seconds": 120,
+  "settled_at": "2026-08-22T06:08:19Z",
+  "head_after_settling": "a3274d7e7222c3ee9a63c70379a0a06ac5208ba6",
+  "snapshot_stable": true,
+  "changes": [],
+  "fresh_observations": {
+    "codex": {
+      "qualified": true,
+      "state": "CODEX_ADVISORY_POSITIVE",
+      "reasons": []
+    },
+    "coderabbit": {
+      "qualified": true,
+      "state": "CODERABBIT_ADVISORY_POSITIVE",
+      "reasons": []
+    }
+  },
+  "decision_after_settling": {
+    "verdict": "SUCCESS_CANDIDATE",
+    "reasons": [],
+    "publishable": false,
+    "note": "internal candidate only; publication is A3b"
+  }
+}
