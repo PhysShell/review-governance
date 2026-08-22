@@ -235,3 +235,63 @@ def test_aborted_rerun_never_reaches_the_provider(history):
         conclusion="failure", output={"summary": ""}, decision_id=decision_id)
     assert projection["projection_state"] == "FAILED"
     assert repo.comments == []
+
+
+# --- c4 terminology: visibility is not validity -----------------------------
+
+def test_confirmed_success_is_the_only_state_that_authorizes_action(history):
+    decision_id = record_success(history)
+    history.project_pending(EPOCH, HEAD, RUN, "success", decision_id, "t1")
+    history.settle_projection(EPOCH, state="CONFIRMED",
+                              observed_conclusion="success", at="t2")
+    status = life.governor_authorization(history, EPOCH)
+    assert status["effective_gate_validity"] == "ESTABLISHED"
+    assert status["may_authorize_action"] is True
+    assert status["external_success_may_exist"] is True
+    assert status["hazard"] is None
+
+
+def test_unsettled_projection_is_hazardous_not_established_either_way(history):
+    """OUTCOME_UNKNOWN while GitHub may physically show success: neither an
+    established success nor an established revocation."""
+    decision_id = record_success(history)
+    history.project_pending(EPOCH, HEAD, RUN, "success", decision_id, "t1")
+    history.settle_projection(EPOCH, state="OUTCOME_UNKNOWN",
+                              observed_conclusion=None, at="t2")
+    status = life.governor_authorization(history, EPOCH)
+
+    assert status["external_success_may_exist"] is True      # may be green out there
+    assert status["effective_gate_validity"] == "NOT_ESTABLISHED"   # …but not to us
+    assert status["may_authorize_action"] is False
+    assert "neither an established success" in status["hazard"]
+
+
+def test_pending_projection_never_authorizes_an_action(history):
+    decision_id = record_success(history)
+    history.project_pending(EPOCH, HEAD, RUN, "success", decision_id, "t1")
+    status = life.governor_authorization(history, EPOCH)
+    assert status["projection_state"] == "PENDING"
+    assert status["may_authorize_action"] is False
+    assert status["effective_gate_validity"] == "NOT_ESTABLISHED"
+
+
+def test_uncertainty_still_forces_cleanup_before_a_new_request(history):
+    """Fail-closed in both directions: no authorization, and no new provider
+    request until the standing green is dealt with."""
+    decision_id = record_success(history)
+    history.project_pending(EPOCH, HEAD, RUN, "success", decision_id, "t1")
+    history.settle_projection(EPOCH, state="OUTCOME_UNKNOWN",
+                              observed_conclusion=None, at="t2")
+    assert life.standing_success(history, EPOCH)["decision_id"] == decision_id
+    assert life.governor_authorization(history, EPOCH)["may_authorize_action"] is False
+
+
+def test_a_failed_projection_authorizes_nothing_and_needs_no_cleanup(history):
+    decision_id = record_success(history)
+    history.project_pending(EPOCH, HEAD, RUN, "success", decision_id, "t1")
+    history.settle_projection(EPOCH, state="FAILED",
+                              observed_conclusion="failure", at="t2")
+    status = life.governor_authorization(history, EPOCH)
+    assert status["may_authorize_action"] is False
+    assert status["effective_gate_validity"] == "NOT_ESTABLISHED"
+    assert status["external_success_may_exist"] is False

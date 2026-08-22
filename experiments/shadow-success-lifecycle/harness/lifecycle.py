@@ -176,21 +176,67 @@ def apply_projection(repo, history, *, epoch_id, head_sha, check_run_id,
             "write": write, "readback": readback}
 
 
-def standing_success(history, epoch_id):
-    """A success that is durably decided and confirmed in GitHub."""
+def governor_authorization(history, epoch_id):
+    """Two different questions that must never share one variable (A3b-c4).
+
+    `external_success_may_exist` is about the *outside world*: GitHub may be
+    showing a green check right now, so the Governor must clean up before
+    doing anything that would make that green misleading.
+
+    `effective_gate_validity` is about *Governor policy*: it is
+    ESTABLISHED only when a success is durably decided AND confirmed by an
+    independent readback. Every uncertain projection is NOT_ESTABLISHED —
+    fail closed.
+
+    Keeping these apart matters because a single ambiguously named flag
+    eventually gets read as permission. `may_authorize_action` is the only
+    field that may ever gate an action, and it is true only for a confirmed
+    success.
+    """
     latest = None
     for row in history.chain():
         if row["epoch_id"] == epoch_id:
             latest = row
-    if not latest or latest["verdict"] != "SUCCESS":
-        return None
     projection = history.projection(epoch_id)
-    if projection and projection["state"] == "CONFIRMED" and \
-            projection["observed_conclusion"] == "success":
-        return dict(latest)
-    if projection and projection["state"] in ("PENDING", "OUTCOME_UNKNOWN"):
-        return dict(latest)          # must be resolved before anything else
-    return None
+    state = projection["state"] if projection else None
+    observed = projection["observed_conclusion"] if projection else None
+    is_success_decision = bool(latest) and latest["verdict"] == "SUCCESS"
+
+    confirmed_success = (is_success_decision and state == "CONFIRMED"
+                         and observed == "success")
+    uncertain = state in ("PENDING", "OUTCOME_UNKNOWN")
+    may_exist_externally = bool(confirmed_success
+                                or (is_success_decision and uncertain)
+                                or (uncertain and observed == "success"))
+
+    if confirmed_success:
+        validity, hazard = "ESTABLISHED", None
+    elif uncertain:
+        validity = "NOT_ESTABLISHED"
+        hazard = ("projection unsettled: GitHub may still physically show a "
+                  "success, and this is neither an established success nor an "
+                  "established revocation")
+    else:
+        validity, hazard = "NOT_ESTABLISHED", None
+
+    return {
+        "external_success_may_exist": may_exist_externally,
+        "effective_gate_validity": validity,
+        "projection_state": state,
+        "hazard": hazard,
+        "may_authorize_action": confirmed_success,
+        "decision": dict(latest) if latest else None,
+    }
+
+
+def standing_success(history, epoch_id):
+    """Fail-closed guard for *write ordering*: returns the decision whenever a
+    success may still be visible in GitHub, including while its projection is
+    unresolved. This answers "must I clean up first?", never "may I proceed?"
+    — that second question belongs to `may_authorize_action`.
+    """
+    status = governor_authorization(history, epoch_id)
+    return status["decision"] if status["external_success_may_exist"] else None
 
 
 def guard(state, repo, bundle, phase):
@@ -562,7 +608,9 @@ def cmd_rerun(args):
         standing = standing_success(history, epoch_id)
         steps = []
 
+        clock = {"monotonic_start": time.monotonic()}
         invalidated_at = gh.utcnow()
+        clock["invalidation_decided_monotonic"] = time.monotonic()
         decision_id = history.record(
             epoch_id=epoch_id, head_sha=bundle["head_sha"],
             verdict="EVIDENCE_INVALIDATED", bundle_hash=None,
@@ -583,8 +631,11 @@ def cmd_rerun(args):
                                       "standing success is extinguished and "
                                       "confirmed BEFORE the new provider "
                                       "request is created (A3b-c3).")))
+        failure_confirmed_at = gh.utcnow()
+        clock["failure_confirmed_monotonic"] = time.monotonic()
         steps.append({"step": "check_failure_projection",
-                      "at": gh.utcnow(),
+                      "at": failure_confirmed_at,
+                      "patch_attempted_at": projection["write"]["attempted_at"],
                       "projection_state": projection["projection_state"],
                       "observed": projection["observed"]})
 
@@ -605,6 +656,7 @@ def cmd_rerun(args):
             outcome = {"state": "REQUEST_CREATED", "comment": slim(comment)}
         except Exception as exc:
             outcome["error"] = f"{type(exc).__name__}: {exc}"
+        clock["provider_request_monotonic"] = time.monotonic()
         steps.append({"step": "provider_request", "started_at": request_started_at,
                       "at": gh.utcnow(), "outcome": outcome["state"]})
 
@@ -629,7 +681,24 @@ def cmd_rerun(args):
             {"label": args.label, "aborted": False, "steps": steps,
              "outcome": outcome["state"]})
         save(args.state, state)
+        ordering = {
+            "invalidation_decided_at": invalidated_at,
+            "failure_patch_attempted_at": projection["write"]["attempted_at"],
+            "failure_confirmed_at": failure_confirmed_at,
+            "provider_request_created_at":
+                (outcome["comment"] or {}).get("created_at"),
+            "monotonic_seconds": {
+                "invalidation_to_failure_confirmed": round(
+                    clock["failure_confirmed_monotonic"]
+                    - clock["invalidation_decided_monotonic"], 3),
+                "failure_confirmed_to_provider_request": round(
+                    clock["provider_request_monotonic"]
+                    - clock["failure_confirmed_monotonic"], 3),
+            },
+        }
+        state.setdefault("orderings", {})[args.label] = ordering
         return {"rerun": True, "decision_id": decision_id,
+                "ordering": ordering,
                 "check_conclusion_before_request": projection["observed"],
                 "projection_state": projection["projection_state"],
                 "request_outcome": outcome["state"],
