@@ -214,6 +214,66 @@ matrix.
 - **INCONCLUSIVE** → no production changes; design a stronger
   identification/control experiment first.
 
+## Amendments
+
+- **A1b-c1 (2026-08-22, after the primary observation, before any
+  classification) — repository-state confounder and matched identity
+  control.**
+
+  Observed, unplanned: the repo's Codex configuration is not the same as it
+  was during A1. Evidence on this very probe PR:
+
+  ```text
+  2026-08-21T18:13:04Z  (PR #14 opened, no command yet)
+      chatgpt-codex-connector[bot]:
+      "To use Codex here, create an environment for this repo"
+
+  2026-08-22T03:38:56Z  (response to the A1b user-attributed command)
+      chatgpt-codex-connector[bot]:
+      "Codex Review: Didn't find any major issues… Your team has set up
+       Codex to review pull requests in this repo"
+  ```
+
+  So between those two timestamps the repository's Codex state changed.
+  A1's Codex refusal ("create a Codex account and connect to github",
+  2026-08-21T07:54:45Z) was observed under the *older* repo state. The
+  naive comparison "A1 App-bot failed / A1b user-attributed succeeded"
+  therefore confounds two variables: **requester identity** and
+  **repository Codex configuration**.
+
+  Isolation procedure, fixed before running it: immediately after the
+  primary observation, on the **same PR, same frozen HEAD, same repo
+  state**, issue one matched control command using the A1 identity — the
+  **App installation token** (author `physshell-review-governor[bot]`) —
+  and observe it with the same recorder and windows.
+
+  ```text
+  App-bot control refused (identity-specific onboarding)
+      -> requester identity is decisive under the current repo state;
+         A1's CODEX_APP_REVIEW_AUTHORITY: FAIL holds, and A1b's success is
+         attributable to user attribution
+
+  App-bot control succeeds
+      -> A1's FAIL was at least partly repo-state dependent; A1b's PASS
+         cannot be attributed to user attribution alone, and A1 requires a
+         documented correction (a correction to A1's *interpretation*, not
+         a rewrite of its captured evidence)
+  ```
+
+  The control is an observation instrument only: it never becomes the
+  primary result, and no repository or Codex configuration is changed by
+  this experiment in either direction.
+
+- **A1b-c2 (2026-08-22, same moment) — terminal carrier is weaker than the
+  pilot's.** The A1b terminal artifact is an *issue comment* whose commit
+  binding is a 10-character SHA prefix inside free text
+  (`Reviewed commit: a4e756b032`), not a `pull_request_review` object with
+  a `commit_id` field (which is what the frozen pilot produced on PR #11).
+  `TERMINAL_HEAD_BINDING` is therefore scored on what was actually
+  observed: attestation carrier, prefix match, and whether any review
+  object exists — recorded separately rather than collapsed into a single
+  YES.
+
 ## Forbidden in A1b
 
 CodeRabbit participation; webhook server; Check Run creation; ruleset or
