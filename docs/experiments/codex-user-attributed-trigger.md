@@ -171,21 +171,27 @@ App mediation observable       YES   (performed_via_github_app = physshell-revie
 Codex command recognized       YES   (eyes reaction at +9 s)
 Codex review authorized        YES   (review executed at +79 s)
 Terminal review                YES   (issue comment, "no major issues")
-Terminal exact-head binding    YES*  (*textual 10-char prefix a4e756b032 on a
-                                      mutable carrier; no pull_request_review object)
+Terminal head attestation      YES   (text "Reviewed commit: a4e756b032",
+                                      a 10-char prefix of the frozen HEAD)
+Authoritative head binding     NO    (no pull_request_review, no commit_id
+                                      field; carrier is a mutable comment)
 
-GITHUB_USER_ATTRIBUTION:       PASS
-APP_MEDIATION_OBSERVABILITY:   PASS
-CODEX_COMMAND_ROUTING:         PASS
-CODEX_REVIEW_AUTHORITY:        PASS
-TERMINAL_HEAD_BINDING:         PASS (advisory carrier)
+GITHUB_USER_ATTRIBUTION:            PASS
+APP_MEDIATION_OBSERVABILITY:        PASS
+CODEX_COMMAND_ROUTING:              PASS
+CODEX_REVIEW_AUTHORITY:             PASS
+TERMINAL_HEAD_ATTESTATION_MATCH:    PASS
+AUTHORITATIVE_HEAD_BINDING:         NOT_AVAILABLE
 
 CODEX_USER_ATTRIBUTED_TRIGGER_AUTHORITY: PASS
 ```
 
-All six preregistered PASS conditions are satisfied, including the sixth
-(terminal evidence attesting the frozen HEAD) — with the carrier caveat
-recorded rather than smoothed over.
+The preregistered sixth PASS condition — terminal evidence binding or
+attesting the frozen HEAD — is met in its *attestation* sense only, and is
+reported under that name (amendment A1b-c3). The program's earlier,
+near-mechanical meaning of head binding was `commit_id == full current
+HEAD`; that does not exist here, so it is scored `NOT_AVAILABLE` rather
+than folded into a `PASS`.
 
 ## What this DOES prove
 
@@ -255,5 +261,14 @@ A1c: user-authorization lifecycle and revocation semantics
 A2 (installation webhook → signed delivery → `synchronize` → STALE epochs →
 Governor-owned non-required check run → exact HEAD binding) remains gated
 and unstarted. A separate open item recorded for whichever stage owns gate
-semantics: Codex's terminal result has no authoritative carrier, so a
-Governor-owned check run would have to *re-attest* it rather than trust it.
+semantics:
+
+> Codex's terminal result has no authoritative carrier. The Governor may
+> derive its own policy verdict from captured advisory provider evidence
+> and publish that verdict as a Governor-owned Check Run. The Check Run
+> does not upgrade the provider carrier into authoritative provider
+> provenance.
+
+A Governor Check Run can be an authoritative statement *by the Governor*
+about what it observed and decided — never a consecration of a mutable
+provider comment.

@@ -274,6 +274,25 @@ matrix.
   object exists — recorded separately rather than collapsed into a single
   YES.
 
+- **A1b-c3 (2026-08-22, before freeze) — head-binding terminology split.**
+  The preregistered result name `TERMINAL_HEAD_BINDING` carried the
+  program's older, near-mechanical meaning: `commit_id == full current
+  HEAD`. What A1b observed is weaker — a 10-character SHA prefix in the
+  free text of a mutable comment — so the single name is replaced by two:
+
+  ```text
+  TERMINAL_HEAD_ATTESTATION_MATCH: PASS            (prefix matches frozen HEAD)
+  AUTHORITATIVE_HEAD_BINDING:      NOT_AVAILABLE   (no commit_id carrier)
+  ```
+
+  Renaming only; no observation, capture or aggregate verdict changes.
+  `CODEX_USER_ATTRIBUTED_TRIGGER_AUTHORITY: PASS` stands.
+
+  Consequent narrowing of the architectural note: the Governor may derive
+  its own policy verdict from captured advisory provider evidence and
+  publish that verdict as a Governor-owned Check Run; the Check Run does
+  not upgrade the provider carrier into authoritative provider provenance.
+
 ## Forbidden in A1b
 
 CodeRabbit participation; webhook server; Check Run creation; ruleset or
