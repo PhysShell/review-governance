@@ -1,0 +1,12 @@
+{
+  "teardown_at": "2026-08-22T09:43:22Z",
+  "ruleset_deleted": 21191731,
+  "ruleset_readback_status": 404,
+  "rulesets_remaining_in_repository": 0,
+  "ref_deleted": "refs/heads/governor/a4a-expected-source-target",
+  "ref_readback_status": 404,
+  "check_run_preserved": {"id": 97011529988, "name": "ai/final-review-expected-source-probe",
+                          "head_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+                          "conclusion": "failure", "app": "physshell-review-governor"},
+  "note": "the check run is commit-bound evidence and is preserved deliberately; deleting the ref does not affect it"
+}

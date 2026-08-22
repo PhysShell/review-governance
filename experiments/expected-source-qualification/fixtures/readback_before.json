@@ -1,0 +1,51 @@
+{
+  "captured_at": "2026-08-22T09:22:19Z",
+  "ruleset": {
+    "id": 21191731,
+    "enforcement": "active",
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": [
+          "refs/heads/governor/a4a-expected-source-target"
+        ]
+      }
+    },
+    "rules": [
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "strict_required_status_checks_policy": false,
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [
+            {
+              "context": "ai/final-review-expected-source-probe"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "scope_is_exactly_the_target_ref": true,
+  "rulesets_in_repository": [
+    {
+      "id": 21191731,
+      "name": "governor-a4a-expected-source-probe",
+      "target": "branch",
+      "enforcement": "active"
+    }
+  ],
+  "ruleset_count": 1,
+  "every_ruleset_scope": [
+    null
+  ],
+  "main_appears_in_no_ruleset_scope": true,
+  "main_branch_protection_status": 404,
+  "main_branch_protection_message": "Branch not protected",
+  "rules_branch_endpoint_status": 404,
+  "rules_branch_endpoint_note": "documented endpoint answers 404 on this account for every ref; not used as evidence",
+  "http": {
+    "ruleset": 200,
+    "rulesets": 200
+  }
+}

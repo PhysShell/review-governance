@@ -1,0 +1,19 @@
+{
+  "captured_at": "2026-08-22T09:21:01Z",
+  "head_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+  "check_run_id": 97011529988,
+  "name": "ai/final-review-expected-source-probe",
+  "conclusion": "failure",
+  "app": {
+    "id": 4669438,
+    "slug": "physshell-review-governor"
+  },
+  "installation_permissions": {
+    "checks": "write",
+    "issues": "write",
+    "metadata": "read",
+    "pull_requests": "write"
+  },
+  "statuses_permission_present": false,
+  "http_status": 200
+}

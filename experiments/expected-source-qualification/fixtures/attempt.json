@@ -1,0 +1,100 @@
+{
+  "attempted_at": "2026-08-22T09:22:37Z",
+  "app_permissions_at_attempt": {
+    "checks": "write",
+    "issues": "write",
+    "metadata": "read",
+    "pull_requests": "write"
+  },
+  "statuses_permission_present": false,
+  "request_payload": {
+    "name": "governor-a4a-expected-source-probe",
+    "target": "branch",
+    "enforcement": "active",
+    "conditions": {
+      "ref_name": {
+        "include": [
+          "refs/heads/governor/a4a-expected-source-target"
+        ],
+        "exclude": []
+      }
+    },
+    "rules": [
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "required_status_checks": [
+            {
+              "context": "ai/final-review-expected-source-probe",
+              "integration_id": 4669438
+            }
+          ],
+          "strict_required_status_checks_policy": false
+        }
+      }
+    ]
+  },
+  "http_status": 200,
+  "response": {
+    "id": 21191731,
+    "name": "governor-a4a-expected-source-probe",
+    "target": "branch",
+    "source_type": "Repository",
+    "source": "PhysShell/evm-from-scratch",
+    "enforcement": "active",
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": [
+          "refs/heads/governor/a4a-expected-source-target"
+        ]
+      }
+    },
+    "rules": [
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "strict_required_status_checks_policy": false,
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [
+            {
+              "context": "ai/final-review-expected-source-probe",
+              "integration_id": 4669438
+            }
+          ]
+        }
+      }
+    ],
+    "node_id": "RRS_lACqUmVwb3NpdG9yec5Pm6HLzgFDXDM",
+    "created_at": "2026-08-22T14:21:11.208+05:00",
+    "updated_at": "2026-08-22T14:22:37.813+05:00",
+    "bypass_actors": [],
+    "current_user_can_bypass": "never",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/PhysShell/evm-from-scratch/rulesets/21191731"
+      },
+      "html": {
+        "href": "https://github.com/PhysShell/evm-from-scratch/rules/21191731"
+      }
+    }
+  },
+  "readback_http_status": 200,
+  "readback_rules": [
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "ai/final-review-expected-source-probe",
+            "integration_id": 4669438
+          }
+        ]
+      }
+    }
+  ],
+  "integration_id_present_after": true,
+  "verdict": null
+}

@@ -1,0 +1,30 @@
+{
+  "captured_at": "2026-08-22T09:21:11Z",
+  "http_status": 201,
+  "ruleset_id": 21191731,
+  "name": "governor-a4a-expected-source-probe",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/governor/a4a-expected-source-target"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "ai/final-review-expected-source-probe"
+          }
+        ]
+      }
+    }
+  ],
+  "error": null
+}
