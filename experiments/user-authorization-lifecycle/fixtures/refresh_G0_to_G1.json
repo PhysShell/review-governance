@@ -1,0 +1,29 @@
+{
+  "from_generation": 0,
+  "response": {
+    "at": "2026-08-22T04:15:36Z",
+    "http_status": 200,
+    "granted": true,
+    "error": null,
+    "error_description": null,
+    "token_type": "bearer",
+    "expires_in": 28800,
+    "refresh_token_expires_in": 15897600,
+    "access_prefix_class": "ghu_",
+    "refresh_prefix_class": "ghr_"
+  },
+  "committed_generation": {
+    "generation": 1,
+    "label": "G1",
+    "access_fingerprint": "ae87624c33db188e",
+    "refresh_fingerprint": "ecc99eb370c91982",
+    "access_prefix_class": "ghu_",
+    "refresh_prefix_class": "ghr_",
+    "token_type": "bearer",
+    "expires_in": 28800,
+    "refresh_token_expires_in": 15897600,
+    "obtained_at": "2026-08-22T04:15:36Z",
+    "obtained_via": "github_app_refresh_grant"
+  },
+  "outcome": "ROTATED"
+}

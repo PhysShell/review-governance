@@ -1,0 +1,15 @@
+{
+  "probed_generation": 1,
+  "access_fingerprint": "ae87624c33db188e",
+  "result": {
+    "at": "2026-08-22T04:15:45Z",
+    "status": 200,
+    "ok": true,
+    "identity": {
+      "login": "PhysShell",
+      "id": 45852143,
+      "type": "User"
+    },
+    "error": null
+  }
+}

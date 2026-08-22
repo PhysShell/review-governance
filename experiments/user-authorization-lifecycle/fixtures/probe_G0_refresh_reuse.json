@@ -1,0 +1,16 @@
+{
+  "probed_generation": 0,
+  "refresh_fingerprint": "bd9ca2a8dd6bfd5b",
+  "result": {
+    "at": "2026-08-22T04:15:46Z",
+    "http_status": 200,
+    "granted": false,
+    "error": "incorrect_client_credentials",
+    "error_description": "The client_id and/or client_secret passed are incorrect.",
+    "token_type": null,
+    "expires_in": null,
+    "refresh_token_expires_in": null,
+    "access_prefix_class": null,
+    "refresh_prefix_class": null
+  }
+}

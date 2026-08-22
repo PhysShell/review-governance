@@ -1,0 +1,13 @@
+{
+  "detection_method": "access token 401 on GET /user",
+  "detected_at": "2026-08-22T04:20:20Z",
+  "status": 401,
+  "error": {
+    "message": "Bad credentials",
+    "documentation_url": "https://docs.github.com/rest"
+  },
+  "polls_before_detection": 7,
+  "first_poll_at": "2026-08-22T04:18:17Z",
+  "generation": 1,
+  "access_fingerprint": "ae87624c33db188e"
+}
