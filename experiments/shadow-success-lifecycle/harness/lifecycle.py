@@ -140,6 +140,59 @@ def build_bundle(epoch, head_sha, auth_generation, requests, observations,
     return payload
 
 
+def apply_projection(repo, history, *, epoch_id, head_sha, check_run_id,
+                     conclusion, output, decision_id, evidence_hash=None):
+    """Durable decision -> PENDING -> PATCH -> independent readback -> settle.
+
+    The PATCH response is never treated as confirmation (A3b-c4). Only a
+    separate GET of that exact run can move a projection to CONFIRMED, and
+    an indeterminate write settles to OUTCOME_UNKNOWN rather than to
+    anything optimistic.
+    """
+    attempted_at = gh.utcnow()
+    history.project_pending(epoch_id, head_sha, check_run_id, conclusion,
+                            decision_id, attempted_at)
+    write = {"attempted_at": attempted_at, "http_status": None, "error": None}
+    try:
+        status, body = repo.conclude_check(check_run_id, conclusion, output,
+                                           evidence_hash=evidence_hash)
+        write["http_status"] = status
+    except Exception as exc:                      # indeterminate write
+        write["error"] = f"{type(exc).__name__}: {exc}"
+        body = None
+
+    readback_status, readback = repo.get_check(check_run_id)
+    observed = (readback or {}).get("conclusion")
+    if readback_status != 200:
+        settled = "OUTCOME_UNKNOWN"
+    elif observed == conclusion:
+        settled = "CONFIRMED"
+    else:
+        settled = "FAILED"
+    history.settle_projection(epoch_id, state=settled,
+                              observed_conclusion=observed, at=gh.utcnow())
+    return {"projection_state": settled, "intended": conclusion,
+            "observed": observed, "readback_status": readback_status,
+            "write": write, "readback": readback}
+
+
+def standing_success(history, epoch_id):
+    """A success that is durably decided and confirmed in GitHub."""
+    latest = None
+    for row in history.chain():
+        if row["epoch_id"] == epoch_id:
+            latest = row
+    if not latest or latest["verdict"] != "SUCCESS":
+        return None
+    projection = history.projection(epoch_id)
+    if projection and projection["state"] == "CONFIRMED" and \
+            projection["observed_conclusion"] == "success":
+        return dict(latest)
+    if projection and projection["state"] in ("PENDING", "OUTCOME_UNKNOWN"):
+        return dict(latest)          # must be resolved before anything else
+    return None
+
+
 def guard(state, repo, bundle, phase):
     """The pre/post publication guard: every predicate, no best effort."""
     failures = []
@@ -240,6 +293,17 @@ def cmd_freeze(args):
 def cmd_trigger(args):
     state = load(args.state)
     repo = gh.Repo(state["repo"])
+    history = dec.History(args.db)
+    try:
+        standing = standing_success(history, state["epoch"]["epoch_id"])
+    finally:
+        history.close()
+    if standing and not args.allow_standing_success:
+        raise SystemExit(
+            "refusing to post a provider request while a success stands for "
+            f"epoch {state['epoch']['epoch_id']} (decision "
+            f"{standing['decision_id']}). Use `rerun`, which extinguishes and "
+            "confirms the failure first (A3b-c3).")
     if repo.pull_request(state["pr_number"])["head"]["sha"] != state["head_sha"]:
         raise SystemExit("head moved; round is STALE")
     bodies = {"codex": "@codex review", "coderabbit": "@coderabbitai full review"}
@@ -319,19 +383,17 @@ def cmd_publish(args):
             auth_generation=bundle["auth_generation"], decided_at=gh.utcnow())
 
         output = summary_for(state, bundle, "SUCCESS")
-        if state.get("check_run_id"):
-            status, body = repo.conclude_check(
-                state["check_run_id"], "success", output,
-                evidence_hash=bundle["evidence_hash"])
-        else:
+        if not state.get("check_run_id"):
             run = repo.create_check(bundle["head_sha"], bundle["epoch_id"], output)
             state["check_run_id"] = run["id"]
-            status, body = repo.conclude_check(
-                run["id"], "success", output,
-                evidence_hash=bundle["evidence_hash"])
+        projection = apply_projection(
+            repo, history, epoch_id=bundle["epoch_id"],
+            head_sha=bundle["head_sha"], check_run_id=state["check_run_id"],
+            conclusion="success", output=output, decision_id=decision_id,
+            evidence_hash=bundle["evidence_hash"])
         github_at = gh.utcnow()
-        history.project(bundle["epoch_id"], bundle["head_sha"], body["id"],
-                        body.get("conclusion"), decision_id, github_at)
+        body = projection["readback"] or {}
+        status = projection["write"]["http_status"]
 
         post, _, _ = guard(state, repo, bundle, phase="post-publication")
         state["timings"][args.label] = {
@@ -339,19 +401,24 @@ def cmd_publish(args):
             "github_success_at": github_at,
             "post_publish_validation_at": post["finished_at"],
         }
-        state["published"] = {"check_run_id": body["id"],
+        state["published"] = {"check_run_id": state["check_run_id"],
                               "conclusion": body.get("conclusion"),
+                              "projection_state": projection["projection_state"],
                               "decision_id": decision_id,
                               "bundle_hash": bundle["evidence_hash"]}
         save(args.state, state)
         app = body.get("app") or {}
-        return {"published": True, "decision_id": decision_id,
-                "check_run_id": body["id"], "head_sha": body.get("head_sha"),
+        return {"published": projection["projection_state"] == "CONFIRMED",
+                "projection_state": projection["projection_state"],
+                "decision_id": decision_id,
+                "check_run_id": state["check_run_id"],
+                "head_sha": body.get("head_sha"),
                 "conclusion": body.get("conclusion"),
                 "external_id": body.get("external_id"),
                 "app": {"id": app.get("id"), "slug": app.get("slug")},
                 "bundle_hash_in_output":
                     bundle["evidence_hash"] in (body.get("output") or {}).get("summary", ""),
+                "readback_status": projection["readback_status"],
                 "http_status": status, "pre_guard": pre, "post_guard": post,
                 "timings": state["timings"][args.label]}
     finally:
@@ -386,10 +453,13 @@ def cmd_supersede(args):
                    f"{', '.join(sorted(newer))}; the previous evidence bundle "
                    f"{bundle['evidence_hash'][:16]}… is no longer current. The "
                    "Governor does not wait for the new review's outcome."))
-        status, body = repo.conclude_check(state["check_run_id"], "failure", output)
+        projection = apply_projection(
+            repo, history, epoch_id=bundle["epoch_id"],
+            head_sha=bundle["head_sha"], check_run_id=state["check_run_id"],
+            conclusion="failure", output=output, decision_id=decision_id)
         revoked_at = gh.utcnow()
-        history.project(bundle["epoch_id"], bundle["head_sha"], body["id"],
-                        body.get("conclusion"), decision_id, revoked_at)
+        body = projection["readback"] or {}
+        status = projection["write"]["http_status"]
         state.setdefault("revocations", []).append({
             "label": args.label, "detected_at": detected_at,
             "revoked_at": revoked_at, "newer": newer,
@@ -397,7 +467,9 @@ def cmd_supersede(args):
         save(args.state, state)
         return {"superseded": True, "decision_id": decision_id,
                 "newer_generations": newer, "http_status": status,
-                "check_run_id": body["id"], "head_sha": body.get("head_sha"),
+                "projection_state": projection["projection_state"],
+                "check_run_id": state["check_run_id"],
+                "head_sha": body.get("head_sha"),
                 "conclusion": body.get("conclusion"),
                 "detected_at": detected_at, "revoked_at": revoked_at}
     finally:
@@ -425,12 +497,14 @@ def cmd_headchange(args):
             invalidates_bundle_hash=old_bundle["evidence_hash"],
             invalidates_decision_id=(history.latest_success() or {})["decision_id"]
             if history.latest_success() else None)
-        status_old, old_body = repo.conclude_check(
-            state["check_run_id"], "cancelled",
-            summary_for(state, old_bundle, "STALE",
-                        extra=f"Superseded by head {new_head}."))
-        history.project(old_bundle["epoch_id"], state["head_sha"], old_body["id"],
-                        old_body.get("conclusion"), stale_id, gh.utcnow())
+        old_projection = apply_projection(
+            repo, history, epoch_id=old_bundle["epoch_id"],
+            head_sha=state["head_sha"], check_run_id=state["check_run_id"],
+            conclusion="cancelled", decision_id=stale_id,
+            output=summary_for(state, old_bundle, "STALE",
+                               extra=f"Superseded by head {new_head}."))
+        old_body = old_projection["readback"] or {}
+        status_old = old_projection["write"]["http_status"]
         state["epoch"]["state"] = "STALE"
 
         new_epoch_id = "epoch-" + hashlib.sha256(
@@ -450,24 +524,153 @@ def cmd_headchange(args):
             decided_at=gh.utcnow(), cause="no provider evidence on the new head")
         run = repo.create_check(new_head, new_epoch_id,
                                 summary_for(state, empty_bundle, "NOT_ESTABLISHED"))
-        status_new, new_body = repo.conclude_check(
-            run["id"], "failure",
-            summary_for(state, empty_bundle, "NOT_ESTABLISHED"))
-        history.project(new_epoch_id, new_head, new_body["id"],
-                        new_body.get("conclusion"), new_id, gh.utcnow())
+        new_projection = apply_projection(
+            repo, history, epoch_id=new_epoch_id, head_sha=new_head,
+            check_run_id=run["id"], conclusion="failure", decision_id=new_id,
+            output=summary_for(state, empty_bundle, "NOT_ESTABLISHED"))
+        new_body = new_projection["readback"] or {}
+        status_new = new_projection["write"]["http_status"]
         state["new_epoch"] = {"epoch_id": new_epoch_id, "head_sha": new_head,
                               "check_run_id": new_body["id"]}
         save(args.state, state)
         return {"changed": True,
-                "old": {"check_run_id": old_body["id"],
+                "old": {"check_run_id": state["check_run_id"],
                         "head_sha": old_body.get("head_sha"),
                         "conclusion": old_body.get("conclusion"),
                         "http_status": status_old},
-                "new": {"check_run_id": new_body["id"],
+                "new": {"check_run_id": run["id"],
                         "head_sha": new_body.get("head_sha"),
                         "conclusion": new_body.get("conclusion"),
                         "external_id": new_body.get("external_id"),
                         "http_status": status_new}}
+    finally:
+        history.close()
+
+
+def cmd_rerun(args):
+    """A3b-c3: extinguish first, confirm, and only then ask for a new review.
+
+    Ordering is the contract. The Governor never knowingly leaves a success
+    standing after performing the act that makes its basis non-current.
+    """
+    state = load(args.state)
+    repo = gh.Repo(state["repo"])
+    history = dec.History(args.db)
+    try:
+        bundle = state["bundles"][args.label]
+        epoch_id = bundle["epoch_id"]
+        standing = standing_success(history, epoch_id)
+        steps = []
+
+        invalidated_at = gh.utcnow()
+        decision_id = history.record(
+            epoch_id=epoch_id, head_sha=bundle["head_sha"],
+            verdict="EVIDENCE_INVALIDATED", bundle_hash=None,
+            bundle_schema=bundle["bundle_version"], decision_rule_revision=RULE,
+            auth_generation=bundle["auth_generation"], decided_at=invalidated_at,
+            cause="rerun_requested_pre_request_invalidation",
+            invalidates_decision_id=standing["decision_id"] if standing else None,
+            invalidates_bundle_hash=bundle["evidence_hash"])
+        steps.append({"step": "durable_invalidation", "at": invalidated_at,
+                      "decision_id": decision_id})
+
+        projection = apply_projection(
+            repo, history, epoch_id=epoch_id, head_sha=bundle["head_sha"],
+            check_run_id=state["check_run_id"], conclusion="failure",
+            decision_id=decision_id,
+            output=summary_for(state, bundle, "EVIDENCE_INVALIDATED",
+                               extra=("Cause: a rerun was requested. The "
+                                      "standing success is extinguished and "
+                                      "confirmed BEFORE the new provider "
+                                      "request is created (A3b-c3).")))
+        steps.append({"step": "check_failure_projection",
+                      "at": gh.utcnow(),
+                      "projection_state": projection["projection_state"],
+                      "observed": projection["observed"]})
+
+        if projection["projection_state"] != "CONFIRMED":
+            state.setdefault("reruns", []).append(
+                {"label": args.label, "aborted": True, "steps": steps})
+            save(args.state, state)
+            return {"rerun": False,
+                    "reason": "failure was not confirmed; no provider request "
+                              "was created",
+                    "steps": steps}
+
+        # only now may the provider be asked for a new review
+        request_started_at = gh.utcnow()
+        outcome = {"state": "REQUEST_OUTCOME_UNKNOWN", "comment": None}
+        try:
+            comment = repo.comment_as_user(state["pr_number"], "@codex review")
+            outcome = {"state": "REQUEST_CREATED", "comment": slim(comment)}
+        except Exception as exc:
+            outcome["error"] = f"{type(exc).__name__}: {exc}"
+        steps.append({"step": "provider_request", "started_at": request_started_at,
+                      "at": gh.utcnow(), "outcome": outcome["state"]})
+
+        if outcome["state"] == "REQUEST_CREATED":
+            state["requests"]["codex"] = {
+                "provider_request_id":
+                    f"{epoch_id}:codex:g{args.generation}",
+                "request_generation": args.generation, "epoch_id": epoch_id,
+                "auth_generation": state["auth"]["generation"],
+                "head_at_request": state["head_sha"],
+                "comment": outcome["comment"]}
+        else:
+            history.record(
+                epoch_id=epoch_id, head_sha=bundle["head_sha"],
+                verdict="EVIDENCE_INVALIDATED", bundle_hash=None,
+                bundle_schema=bundle["bundle_version"],
+                decision_rule_revision=RULE,
+                auth_generation=bundle["auth_generation"], decided_at=gh.utcnow(),
+                cause="request_outcome_unknown_check_remains_failure")
+
+        state.setdefault("reruns", []).append(
+            {"label": args.label, "aborted": False, "steps": steps,
+             "outcome": outcome["state"]})
+        save(args.state, state)
+        return {"rerun": True, "decision_id": decision_id,
+                "check_conclusion_before_request": projection["observed"],
+                "projection_state": projection["projection_state"],
+                "request_outcome": outcome["state"],
+                "request_comment_id": (outcome["comment"] or {}).get("id"),
+                "request_created_at": (outcome["comment"] or {}).get("created_at"),
+                "steps": steps}
+    finally:
+        history.close()
+
+
+def cmd_reconcile_projection(args):
+    """Resolve PENDING / OUTCOME_UNKNOWN projections by reading the exact run.
+
+    This is what distinguishes "GitHub accepted the write and the response
+    was lost" from "the write never took effect" — and it never resolves
+    upward into a success on its own.
+    """
+    state = load(args.state)
+    repo = gh.Repo(state["repo"])
+    history = dec.History(args.db)
+    try:
+        resolved = []
+        for row in history.unsettled_projections():
+            status, run = repo.get_check(row["check_run_id"])
+            observed = (run or {}).get("conclusion")
+            if status != 200:
+                settled = "OUTCOME_UNKNOWN"
+            elif observed == row["intended_conclusion"]:
+                settled = "CONFIRMED"
+            else:
+                settled = "FAILED"
+            history.settle_projection(row["epoch_id"], state=settled,
+                                      observed_conclusion=observed,
+                                      at=gh.utcnow())
+            resolved.append({"epoch_id": row["epoch_id"],
+                             "check_run_id": row["check_run_id"],
+                             "intended": row["intended_conclusion"],
+                             "observed": observed, "settled": settled})
+        return {"reconciled": resolved,
+                "note": "an unknown projection never becomes a success here; "
+                        "it is only ever resolved by reading GitHub"}
     finally:
         history.close()
 
@@ -486,6 +689,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("command", choices=["freeze", "trigger", "observe", "bundle",
                                         "settle", "publish", "supersede",
+                                        "rerun", "reconcile-projection",
                                         "headchange", "state"])
     ap.add_argument("--repo", default="PhysShell/evm-from-scratch")
     ap.add_argument("--pr", type=int)
@@ -496,11 +700,15 @@ def main() -> int:
     ap.add_argument("--label", default="bundle_1")
     ap.add_argument("--seconds", type=int, default=None)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--allow-standing-success", action="store_true",
+                    help="escape hatch used only by tests; never in a round")
     args = ap.parse_args()
 
     result = {"freeze": cmd_freeze, "trigger": cmd_trigger, "observe": cmd_observe,
               "bundle": cmd_bundle, "settle": cmd_settle, "publish": cmd_publish,
               "supersede": cmd_supersede, "headchange": cmd_headchange,
+              "rerun": cmd_rerun,
+              "reconcile-projection": cmd_reconcile_projection,
               "state": cmd_state}[args.command](args)
     rendered = json.dumps(result, indent=2, default=str)
     if args.out:

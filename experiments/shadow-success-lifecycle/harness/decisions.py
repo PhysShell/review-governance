@@ -26,12 +26,16 @@ CREATE TABLE IF NOT EXISTS decisions (
     previous_decision_id   INTEGER
 );
 CREATE TABLE IF NOT EXISTS projections (
-    epoch_id      TEXT PRIMARY KEY,
-    head_sha      TEXT NOT NULL,
-    check_run_id  INTEGER,
-    conclusion    TEXT,
-    decision_id   INTEGER,
-    updated_at    TEXT NOT NULL
+    epoch_id            TEXT PRIMARY KEY,
+    head_sha            TEXT NOT NULL,
+    check_run_id        INTEGER,
+    intended_conclusion TEXT,
+    observed_conclusion TEXT,
+    state               TEXT NOT NULL,
+    decision_id         INTEGER,
+    attempted_at        TEXT,
+    confirmed_at        TEXT,
+    updated_at          TEXT NOT NULL
 );
 CREATE TRIGGER IF NOT EXISTS decisions_are_append_only_update
 BEFORE UPDATE ON decisions
@@ -88,16 +92,42 @@ class History:
         return self.conn.execute(
             "SELECT * FROM decisions ORDER BY decision_id").fetchall()
 
-    def project(self, epoch_id, head_sha, check_run_id, conclusion,
-                decision_id, at):
+    def project_pending(self, epoch_id, head_sha, check_run_id,
+                        intended_conclusion, decision_id, at):
+        """A projection is PENDING from the moment the durable decision is
+        committed until an independent readback confirms it."""
         self.conn.execute(
             "INSERT INTO projections (epoch_id, head_sha, check_run_id,"
-            " conclusion, decision_id, updated_at) VALUES (?,?,?,?,?,?) "
-            "ON CONFLICT(epoch_id) DO UPDATE SET check_run_id=excluded.check_run_id,"
-            " conclusion=excluded.conclusion, decision_id=excluded.decision_id,"
-            " updated_at=excluded.updated_at",
-            (epoch_id, head_sha, check_run_id, conclusion, decision_id, at))
+            " intended_conclusion, observed_conclusion, state, decision_id,"
+            " attempted_at, confirmed_at, updated_at)"
+            " VALUES (?,?,?,?,NULL,'PENDING',?,?,NULL,?) "
+            "ON CONFLICT(epoch_id) DO UPDATE SET head_sha=excluded.head_sha,"
+            " check_run_id=excluded.check_run_id,"
+            " intended_conclusion=excluded.intended_conclusion,"
+            " observed_conclusion=NULL, state='PENDING',"
+            " decision_id=excluded.decision_id, attempted_at=excluded.attempted_at,"
+            " confirmed_at=NULL, updated_at=excluded.updated_at",
+            (epoch_id, head_sha, check_run_id, intended_conclusion,
+             decision_id, at, at))
         self.conn.commit()
+
+    def settle_projection(self, epoch_id, *, state, observed_conclusion,
+                          check_run_id=None, at):
+        assert state in ("CONFIRMED", "OUTCOME_UNKNOWN", "FAILED"), state
+        row = self.projection(epoch_id)
+        self.conn.execute(
+            "UPDATE projections SET state=?, observed_conclusion=?,"
+            " check_run_id=COALESCE(?, check_run_id),"
+            " confirmed_at=CASE WHEN ?='CONFIRMED' THEN ? ELSE confirmed_at END,"
+            " updated_at=? WHERE epoch_id=?",
+            (state, observed_conclusion, check_run_id, state, at, at, epoch_id))
+        self.conn.commit()
+        return dict(row) if row else None
+
+    def unsettled_projections(self):
+        return self.conn.execute(
+            "SELECT * FROM projections WHERE state IN ('PENDING',"
+            " 'OUTCOME_UNKNOWN') ORDER BY updated_at").fetchall()
 
     def projection(self, epoch_id):
         return self.conn.execute(

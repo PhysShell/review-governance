@@ -171,6 +171,11 @@ class Repo:
         assert status == 201, (status, body)
         return body
 
+    def get_check(self, check_run_id: int):
+        """Independent readback of one exact run — the only thing that may
+        confirm a projection. A PATCH response body is not confirmation."""
+        return self.as_app("GET", f"/repos/{self.full_name}/check-runs/{check_run_id}")
+
     def conclude_check(self, check_run_id: int, conclusion: str, output: dict,
                        *, evidence_hash: str = None):
         if conclusion in FORBIDDEN_CONCLUSIONS:
