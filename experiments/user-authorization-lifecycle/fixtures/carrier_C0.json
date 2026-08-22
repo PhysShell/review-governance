@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-08-22T04:14:47Z",
+  "carrier_label": "C0",
+  "credential_generation": 0,
+  "generation_fingerprints": {
+    "access_fingerprint": "dc87549ea0062906",
+    "refresh_fingerprint": "bd9ca2a8dd6bfd5b",
+    "access_prefix_class": "ghu_",
+    "refresh_prefix_class": "ghr_"
+  },
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 16,
+  "head_sha_at_request": "3879664eb01699a9046463ec014896005fff04e4",
+  "comment": {
+    "id": 5377815336,
+    "body": "Governor lifecycle probe \u2014 carrier C0 (credential generation G0). No action requested; A1c triggers no providers.",
+    "created_at": "2026-08-22T04:14:45Z",
+    "html_url": "https://github.com/PhysShell/evm-from-scratch/pull/16#issuecomment-5377815336",
+    "user": {
+      "login": "PhysShell",
+      "id": 45852143,
+      "type": "User"
+    },
+    "performed_via_github_app": {
+      "id": 4669438,
+      "slug": "physshell-review-governor"
+    }
+  },
+  "matches_expected_user": true,
+  "matches_governor_mediation": true
+}

@@ -1,0 +1,14 @@
+{
+  "probed_generation": 0,
+  "access_fingerprint": "dc87549ea0062906",
+  "result": {
+    "at": "2026-08-22T04:15:45Z",
+    "status": 401,
+    "ok": false,
+    "identity": null,
+    "error": {
+      "message": "Bad credentials",
+      "documentation_url": "https://docs.github.com/rest"
+    }
+  }
+}

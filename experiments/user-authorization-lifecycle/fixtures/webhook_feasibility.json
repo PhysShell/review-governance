@@ -1,0 +1,10 @@
+{
+  "at": "2026-08-22T04:18:00Z",
+  "webhook_config_status": 404,
+  "webhook_config": {
+    "message": "Not Found"
+  },
+  "app_events_subscribed": [],
+  "app_id": 4669438,
+  "conclusion": "no webhook configured on the App \u2014 github_app_authorization cannot be delivered anywhere"
+}
