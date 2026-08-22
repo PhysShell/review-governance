@@ -1,0 +1,38 @@
+{
+  "HEAD_A": {
+    "sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+    "runs": [
+      {
+        "id": 96998302115,
+        "name": "ai/final-review-shadow",
+        "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+        "conclusion": "cancelled",
+        "external_id": "epoch-d6743339efed1671",
+        "app": {
+          "id": 4669438,
+          "slug": "physshell-review-governor"
+        },
+        "output_title": "Governor: STALE"
+      }
+    ],
+    "any_success": false
+  },
+  "HEAD_B": {
+    "sha": "561b7f72bbdafbce63a844fb709ccf5e5b44b4dd",
+    "runs": [
+      {
+        "id": 96998879863,
+        "name": "ai/final-review-shadow",
+        "head_sha": "561b7f72bbdafbce63a844fb709ccf5e5b44b4dd",
+        "conclusion": "failure",
+        "external_id": "epoch-78deabcd44a7b0f6",
+        "app": {
+          "id": 4669438,
+          "slug": "physshell-review-governor"
+        },
+        "output_title": "Governor: NOT_ESTABLISHED"
+      }
+    ],
+    "any_success": false
+  }
+}

@@ -88,21 +88,56 @@ def observe(state, inventory):
     }
 
 
-def newer_request_generations(state, inventory):
+def newer_request_generations(bundle, inventory):
     """A newer request for a mandatory provider means the frozen bundle is no
-    longer current — regardless of what that new request eventually says."""
+    longer current — regardless of what that new request eventually says.
+
+    The baseline is taken from the **bundle**, never from live state: if it
+    came from live state, issuing a new request would quietly become its own
+    baseline and erase the evidence that anything is newer (correction
+    A3b-c1).
+    """
     newer = {}
     for provider, pattern in TRIGGER_PATTERNS.items():
-        current = state["requests"][provider]["comment"]
+        baseline_id = bundle["observations"][provider]["request_comment_id"]
+        baseline = next((c for c in inventory["issue_comments"]
+                         if c["id"] == baseline_id), None)
+        if baseline is None:
+            newer[provider] = "baseline request comment no longer visible"
+            continue
         for comment in inventory["issue_comments"]:
-            if comment["id"] == current["id"]:
+            if comment["id"] == baseline_id:
                 continue
             if qualify.carrier_of(comment) != "app_mediated_user":
                 continue
             if pattern.search(comment.get("body") or "") and \
-                    comment["created_at"] > current["created_at"]:
+                    comment["created_at"] > baseline["created_at"]:
                 newer[provider] = comment["id"]
     return newer
+
+
+def build_bundle(epoch, head_sha, auth_generation, requests, observations,
+                 cutoff):
+    """The single canonical bundle builder for A3b.
+
+    One function, used by both construction and every re-verification —
+    otherwise "the evidence hash recomputes" only ever proves that two
+    slightly different builders happened to agree.
+    """
+    payload = {
+        "bundle_version": qualify.BUNDLE_VERSION,
+        "epoch_id": epoch["epoch_id"],
+        "epoch_generation": epoch["generation"],
+        "head_sha": head_sha,
+        "auth_generation": auth_generation,
+        "decision_rule_revision": RULE,
+        "requests": requests,
+        "observations": observations,
+        "inventory_cutoff": cutoff,
+    }
+    payload["evidence_hash"] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode()).hexdigest()
+    return payload
 
 
 def guard(state, repo, bundle, phase):
@@ -120,9 +155,11 @@ def guard(state, repo, bundle, phase):
     if state["auth"]["state"] != "AUTHORIZED":
         failures.append(f"authorization is {state['auth']['state']}")
 
-    recomputed = qualify.build_bundle(
-        state["epoch"], bundle["head_sha"], bundle["auth_generation"],
-        bundle["requests"], bundle["observations"], bundle["inventory_cutoff"])
+    recomputed = build_bundle(
+        {"epoch_id": bundle["epoch_id"],
+         "generation": bundle["epoch_generation"]},
+        bundle["head_sha"], bundle["auth_generation"], bundle["requests"],
+        bundle["observations"], bundle["inventory_cutoff"])
     if recomputed["evidence_hash"] != bundle["evidence_hash"]:
         failures.append("evidence hash does not recompute")
 
@@ -134,7 +171,7 @@ def guard(state, repo, bundle, phase):
     if not mutation["stable"]:
         failures.extend(mutation["changes"])
 
-    newer = newer_request_generations(state, inventory)
+    newer = newer_request_generations(bundle, inventory)
     for provider, comment_id in newer.items():
         failures.append(f"newer {provider} request generation exists "
                         f"(comment {comment_id})")
@@ -241,15 +278,11 @@ def cmd_observe(args):
 
 def cmd_bundle(args):
     state = load(args.state)
-    bundle = qualify.build_bundle(
+    bundle = build_bundle(
         state["epoch"], state["head_sha"], state["auth"]["generation"],
         {p: {k: v for k, v in r.items() if k != "comment"}
          for p, r in state["requests"].items()},
         state["observations"], state["inventory"]["captured_at"])
-    bundle["decision_rule_revision"] = RULE
-    bundle["evidence_hash"] = hashlib.sha256(
-        json.dumps({k: v for k, v in bundle.items() if k != "evidence_hash"},
-                   sort_keys=True).encode()).hexdigest()
     state["bundles"][args.label] = bundle
     save(args.state, state)
     return {"label": args.label, "evidence_hash": bundle["evidence_hash"],
@@ -332,13 +365,13 @@ def cmd_supersede(args):
     repo = gh.Repo(state["repo"])
     history = dec.History(args.db)
     try:
+        bundle = state["bundles"][args.label]
         inventory = capture_inventory(repo, state["pr_number"])
-        newer = newer_request_generations(state, inventory)
+        newer = newer_request_generations(bundle, inventory)
         if not newer:
             return {"superseded": False, "reason": "no newer generation observed"}
         detected_at = gh.utcnow()
         standing = history.latest_success()
-        bundle = state["bundles"][args.label]
         decision_id = history.record(
             epoch_id=bundle["epoch_id"], head_sha=bundle["head_sha"],
             verdict="EVIDENCE_INVALIDATED", bundle_hash=None,

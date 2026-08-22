@@ -1,0 +1,13 @@
+{
+  "superseded": true,
+  "decision_id": 2,
+  "newer_generations": {
+    "codex": 5378980915
+  },
+  "http_status": 200,
+  "check_run_id": 96998302115,
+  "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+  "conclusion": "failure",
+  "detected_at": "2026-08-22T07:20:48Z",
+  "revoked_at": "2026-08-22T07:20:49Z"
+}

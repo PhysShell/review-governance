@@ -1,0 +1,27 @@
+{
+  "source": "live TOCTOU measurements",
+  "publications": {
+    "bundle_1": {
+      "pre_publish_validation_at": "2026-08-22T07:19:32Z",
+      "github_success_at": "2026-08-22T07:19:34Z",
+      "post_publish_validation_at": "2026-08-22T07:19:37Z"
+    },
+    "bundle_2": {
+      "pre_publish_validation_at": "2026-08-22T07:24:18Z",
+      "github_success_at": "2026-08-22T07:24:19Z",
+      "post_publish_validation_at": "2026-08-22T07:24:22Z"
+    }
+  },
+  "revocations": [
+    {
+      "label": "bundle_1",
+      "detected_at": "2026-08-22T07:20:48Z",
+      "revoked_at": "2026-08-22T07:20:49Z",
+      "newer": {
+        "codex": 5378980915
+      },
+      "decision_id": 2,
+      "conclusion": "failure"
+    }
+  ]
+}

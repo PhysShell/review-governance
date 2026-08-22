@@ -206,6 +206,28 @@ TOCTOU_WINDOW_RECORDED                 PASS/FAIL
 GOVERNOR_SHADOW_SUCCESS_CONTRACT: PASS | PARTIAL | FAIL
 ```
 
+## Amendments (harness corrections found by the live run)
+
+- **A3b-c1 — the "no newer request generation" predicate must be anchored
+  to the bundle, not to live state.** The first implementation compared
+  incoming trigger comments against `state["requests"]`, which the act of
+  issuing a new request overwrites. Consequence, observed live: posting a
+  newer Codex request made that request its own baseline, so the guard
+  reported *no* newer generation and the standing success would have
+  survived its own invalidation. The baseline is now taken from
+  `bundle.observations[provider].request_comment_id` — an immutable field
+  of the frozen bundle. This is exactly the failure class the program
+  exists to catch: a validity predicate evaluated against mutable state
+  erases the evidence that it has been violated.
+
+- **A3b-c2 — one canonical bundle builder.** Construction used a builder
+  stamped `a3a.1` and then overwrote the rule revision to `a3b.1` before
+  re-hashing, while re-verification called the original builder. The guard
+  caught it immediately ("evidence hash does not recompute") — correctly,
+  since two slightly different builders agreeing proves nothing. There is
+  now a single `build_bundle` used by construction and by every
+  re-verification.
+
 ## Stop rule
 
 After fixtures, replay and adversarial tests, live check captures, the
