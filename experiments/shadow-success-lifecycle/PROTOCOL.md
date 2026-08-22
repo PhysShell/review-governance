@@ -228,6 +228,69 @@ GOVERNOR_SHADOW_SUCCESS_CONTRACT: PASS | PARTIAL | FAIL
   now a single `build_bundle` used by construction and by every
   re-verification.
 
+## Correction round A3b-c3 / A3b-c4 (preregistered before the live rerun)
+
+The first A3b run proved a standing success is *revocable*. It did not
+prove the Governor never knowingly leaves one standing. Two gaps, both
+visible in the live timeline and in the code:
+
+- **A3b-c3 — pre-request invalidation.** The new Codex request was posted
+  at `07:19:52` and the success was only revoked at `07:20:49`: the green
+  verdict stood for ~57 seconds *after the Governor itself performed the
+  act that made its basis non-current*. Ordering is now part of the
+  contract, and enforced structurally rather than by discipline:
+
+  ```text
+  standing SUCCESS
+    -> durable EVIDENCE_INVALIDATED / RERUN_PENDING
+    -> GitHub check FAILURE
+    -> readback confirms FAILURE
+    -> only then POST the new provider request
+  ```
+
+  If the provider POST's outcome is unknown (lost response, ambiguous
+  error), the Governor records `REQUEST_OUTCOME_UNKNOWN`, the check stays
+  `failure`, and the previous success is **never** automatically restored.
+  A plain `trigger` is refused while a confirmed success stands for the
+  current bundle — the only way to start a new round is the ordered rerun
+  path.
+
+- **A3b-c4 — projection confirmation.** Publication treated the PATCH
+  response body as proof of publication. There was no projection state and
+  no independent read of the exact `check_run_id`. Projections now carry:
+
+  ```text
+  PENDING           durable decision committed, GitHub not yet confirmed
+  CONFIRMED         exact readback of that check_run_id matches the intent
+  OUTCOME_UNKNOWN   PATCH outcome indeterminate — must be reconciled
+  FAILED            readback disagrees with the intended conclusion
+  ```
+
+  Every publication is: durable decision → projection `PENDING` → PATCH →
+  **separate GET of that exact run** → `CONFIRMED`/`FAILED`, or
+  `OUTCOME_UNKNOWN` if the write itself was indeterminate. Reconciliation
+  must distinguish "GitHub accepted, response lost" from "PATCH never took
+  effect", by reading the run rather than trusting the earlier response,
+  and an unknown projection never resolves upward into a success without a
+  fresh guard.
+
+Added result rows:
+
+```text
+PRE_REQUEST_SUCCESS_INVALIDATION       PASS/FAIL
+REQUEST_OUTCOME_UNKNOWN_FAIL_CLOSED    PASS/FAIL
+PROJECTION_PENDING_STATE               PASS/FAIL
+PROJECTION_EXACT_READBACK              PASS/FAIL
+AMBIGUOUS_PROJECTION_RECONCILIATION    PASS/FAIL
+```
+
+Live requirement: one fresh success on a **new** disposable probe PR, then
+the ordered rerun — extinguish, confirm `failure`, and only then post
+`@codex review` — with timestamps proving the check was already `failure`
+before the request existed. Normal PATCH → exact GET → `CONFIRMED` is also
+verified live; the lost-response branches are modelled adversarially rather
+than by tearing a connection for effect.
+
 ## Stop rule
 
 After fixtures, replay and adversarial tests, live check captures, the
