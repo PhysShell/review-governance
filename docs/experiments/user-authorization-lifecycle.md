@@ -199,8 +199,10 @@ C2 identical to C0/C1. → `HUMAN_REAUTH_RECOVERY: PASS`.
 
 ```text
 Refresh rotates pair                     PASS
-Old access invalidated                   PASS
+Proactive refresh before expiry          PASS
+Old access invalidated (by rotation)     PASS
 Old refresh invalidated                  PASS
+Recovery after NATURAL access expiry     NOT_TESTED
 Carrier preserved after refresh          PASS
 Revoked access rejected                  PASS
 Revoked refresh rejected                 PASS
@@ -222,7 +224,8 @@ Answers to the five operational questions:
 | question | answer | basis |
 |---|---|---|
 | Refresh without human involvement? | **Yes** | observed rotation, carrier preserved |
-| Survive ordinary access-token expiry? | **Yes**, while a valid refresh generation exists | observed |
+| Avoid ordinary access-token expiry without a human? | **Yes** | observed via *proactive* refresh (G0 rotated 44 min after issue, well inside its 8 h life) |
+| Recover *after* the access token has already expired naturally, while the refresh token is still valid? | **NOT_TESTED** | no natural expiry occurred in this experiment |
 | Recover from user revocation without a human? | **No** | observed: both tokens dead |
 | Survive a lost successful refresh response? | **No**, absent a newer durable generation | inferred from observed rotation |
 | Does installation-side coordination survive? | **Yes** | observed at every phase |
@@ -250,6 +253,13 @@ Answers to the five operational questions:
   delivered or validated here.
 - Not that the ambiguous-outcome hazard behaves as modelled — it was
   reasoned from the observed single-use rotation, never provoked.
+- **Not that recovery from a naturally expired access token works.** No
+  natural expiry occurred: G0 was issued `03:31:38Z` with `expires_in`
+  28800 and was rotated at `04:15:36Z`, about 44 minutes later. What was
+  observed is *proactive* refresh well inside the token's life, plus
+  invalidation of the old access token **by rotation** — not by the clock.
+  Refreshing after the access token has already lapsed is `NOT_TESTED`
+  (amendment A1c-c2).
 - Not anything about long-horizon behaviour: the 6-month refresh lifetime,
   refresh-token expiry, or repeated rotation over weeks were not observed.
 - Not that a production token daemon is safe; none was built, and the CAS

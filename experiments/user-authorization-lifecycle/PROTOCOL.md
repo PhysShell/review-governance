@@ -278,6 +278,35 @@ consequence / Next gate.
   rejection triggers a durable-generation re-read first, and never by
   itself implies revocation.
 
+- **A1c-c2 (2026-08-22, before freeze) — proactive refresh is not natural
+  expiry.** The result matrix carried "survive ordinary access-token
+  expiry: yes, observed". No natural expiry occurred: G0 was issued
+  `03:31:38Z` with `expires_in` 28800 and refreshed at `04:15:36Z`, ~44
+  minutes into an 8-hour life. Old-access invalidation was caused by
+  **rotation**, not by the clock. The claim is split:
+
+  ```text
+  PROACTIVE_REFRESH:                    PASS        (observed)
+  OLD_ACCESS_INVALIDATION:              PASS        (observed, by rotation)
+  POST_NATURAL_EXPIRY_REFRESH_RECOVERY: NOT_TESTED
+  ```
+
+  and the operational question becomes two:
+
+  ```text
+  Can the Governor avoid ordinary access-token expiry without a human?
+      YES — observed, via proactive refresh.
+  Can it recover after the access token has already expired naturally,
+  while the refresh token remains valid?
+      NOT_TESTED.
+  ```
+
+  Epistemic labelling only; no observation, capture or aggregate verdict
+  changes. `USER_AUTH_LIFECYCLE: VIABLE_WITH_HUMAN_RECOVERY` and
+  `UNATTENDED_TRIGGER_AUTHORITY: HUMAN_DEPENDENT` stand. Production intent
+  is to refresh proactively and never reach expiry, so this gap is a label
+  to carry forward, not a blocker.
+
 ## Forbidden in A1c
 
 Triggering Codex or CodeRabbit; building a production token daemon;
