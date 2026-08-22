@@ -1,0 +1,87 @@
+{
+  "source": "live capture, probe PR #14 final reconciliation",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 14,
+  "frozen_head": "a4e756b0324e1bebd76a2476a684dfa753abca54",
+  "reviews_present": 0,
+  "inline_comments_present": 0,
+  "issue_comments": [
+    {
+      "id": 5373574224,
+      "user": {
+        "login": "coderabbitai[bot]",
+        "id": 136622811,
+        "type": "Bot"
+      },
+      "created_at": "2026-08-21T18:13:02Z",
+      "performed_via_github_app": "coderabbitai",
+      "body_head": "<!-- This is an auto-generated comment: summarize by coderabbit.ai --> <!-- This is an auto-generated comment:"
+    },
+    {
+      "id": 5373574639,
+      "user": {
+        "login": "chatgpt-codex-connector[bot]",
+        "id": 199175422,
+        "type": "Bot"
+      },
+      "created_at": "2026-08-21T18:13:04Z",
+      "performed_via_github_app": "chatgpt-codex-connector",
+      "body_head": "To use Codex here, [create an environment for this repo](https://chatgpt.com/codex/cloud/settings/environments"
+    },
+    {
+      "id": 5377631148,
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      },
+      "created_at": "2026-08-22T03:32:07Z",
+      "performed_via_github_app": "physshell-review-governor",
+      "body_head": "Governor user-attributed identity probe — no action requested. (ai-final-review Stage A1b; request envelope ca"
+    },
+    {
+      "id": 5377651611,
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143,
+        "type": "User"
+      },
+      "created_at": "2026-08-22T03:37:37Z",
+      "performed_via_github_app": "physshell-review-governor",
+      "body_head": "@codex review"
+    },
+    {
+      "id": 5377656674,
+      "user": {
+        "login": "chatgpt-codex-connector[bot]",
+        "id": 199175422,
+        "type": "Bot"
+      },
+      "created_at": "2026-08-22T03:38:56Z",
+      "performed_via_github_app": "chatgpt-codex-connector",
+      "body_head": "Codex Review: Didn't find any major issues. Bravo.  **Reviewed commit:** `a4e756b032`  <details> <summary>ℹ️ A"
+    },
+    {
+      "id": 5377668179,
+      "user": {
+        "login": "physshell-review-governor[bot]",
+        "id": 319376779,
+        "type": "Bot"
+      },
+      "created_at": "2026-08-22T03:41:57Z",
+      "performed_via_github_app": "physshell-review-governor",
+      "body_head": "@codex review"
+    },
+    {
+      "id": 5377668534,
+      "user": {
+        "login": "chatgpt-codex-connector[bot]",
+        "id": 199175422,
+        "type": "Bot"
+      },
+      "created_at": "2026-08-22T03:42:02Z",
+      "performed_via_github_app": "chatgpt-codex-connector",
+      "body_head": "To use Codex here, [create a Codex account and connect to github](https://chatgpt.com/codex/cloud/settings/con"
+    }
+  ]
+}
