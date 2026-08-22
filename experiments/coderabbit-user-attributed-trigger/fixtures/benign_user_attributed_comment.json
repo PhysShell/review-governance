@@ -1,0 +1,48 @@
+{
+  "captured_at": "2026-08-22T03:55:56Z",
+  "purpose": "identity-probe",
+  "auth_model": "github_app_user_access_token",
+  "repo": "PhysShell/evm-from-scratch",
+  "repository_id": 1335599563,
+  "pr_number": 15,
+  "pr_at_request": {
+    "number": 15,
+    "state": "open",
+    "draft": true,
+    "head_sha": "44ed22c487ae59528e0840e03ff983c6fea3bfcb",
+    "head_ref": "probe/coderabbit-user-attributed-trigger",
+    "updated_at": "2026-08-22T03:55:48Z"
+  },
+  "request_comment": {
+    "id": 5377728754,
+    "body": "Governor user-attributed identity probe \u2014 no action requested. (ai-final-review Stage A1b-R; request envelope captured in the control plane, PhysShell/review-governance.)",
+    "created_at": "2026-08-22T03:55:54Z",
+    "html_url": "https://github.com/PhysShell/evm-from-scratch/pull/15#issuecomment-5377728754",
+    "user": {
+      "login": "PhysShell",
+      "id": 45852143,
+      "type": "User"
+    },
+    "performed_via_github_app": {
+      "id": 4669438,
+      "slug": "physshell-review-governor",
+      "name": "physshell-review-governor"
+    }
+  },
+  "app_mediation_observability": "PASS",
+  "response_headers": {
+    "date": "Sat, 22 Aug 2026 03:55:54 GMT",
+    "x-github-request-id": "AEDF:E27DF:3BEA892:3A40265:6A891DCA",
+    "x-ratelimit-remaining": "4964"
+  },
+  "token_provenance": {
+    "token_prefix": "ghu_",
+    "token_type": "bearer",
+    "expires_in_at_issue": 28800,
+    "refresh_token_issued": true,
+    "refresh_token_used_in_a1b": false,
+    "obtained_via": "github_app_device_flow",
+    "obtained_at": "2026-08-22T03:31:38Z",
+    "scope_field": ""
+  }
+}

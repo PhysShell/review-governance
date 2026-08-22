@@ -1,0 +1,19 @@
+{
+  "provenance": "frozen A1 evidence (PR #1): CodeRabbit acknowledged the plain-human carrier in 5 s",
+  "source": "live capture, probe PR #13 matched human control (A1-c2)",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 13,
+  "in_reply_to_request_comment": 5367779912,
+  "response": {
+    "id": 5367780817,
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "type": "Bot"
+    },
+    "created_at": "2026-08-21T08:58:02Z",
+    "updated_at": "2026-08-21T08:58:02Z",
+    "body": "<!-- This is an auto-generated reply by CodeRabbit -->\n<!-- CodeRabbit review command invocation: 7e8c43b8-be68-4f6d-974c-0b6b80ed3447 -->\n<details>\n<summary>Action performed</summary>\n\nFull review triggered.\n\n</details>",
+    "performed_via_github_app": "coderabbitai"
+  }
+}

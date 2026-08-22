@@ -1,0 +1,19 @@
+{
+  "source": "live capture, probe PR #15 — CodeRabbit response to the App-mediated user command",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 15,
+  "in_reply_to_request_comment": 5377746719,
+  "latency_seconds": 8,
+  "response": {
+    "id": 5377747235,
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "type": "Bot"
+    },
+    "created_at": "2026-08-22T04:00:39Z",
+    "updated_at": "2026-08-22T04:00:44Z",
+    "body": "<!-- This is an auto-generated reply by CodeRabbit -->\n<!-- CodeRabbit review command invocation: 13b96ad7-d232-4b98-86aa-72a67ed593b7 -->\n<details>\n<summary>⚠️ Action not completed</summary>\n\nReview rate limited.\n\n---\n\nYour included review limit is currently reached under our [Fair Usage Limits Policy](https://docs.coderabbit.ai/management/plans#fair-usage-limits-policy). This review may still proceed through usage-based billing if eligible. Your next included review will be available in 49 minutes.\n\n</details>",
+    "performed_via_github_app": "coderabbitai"
+  }
+}
