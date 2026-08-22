@@ -1,0 +1,16 @@
+{
+  "decision_id": 1,
+  "check_run_id": 97017961394,
+  "verdict": "SUCCESS",
+  "intended": "success",
+  "observed": "success",
+  "projection_state": "CONFIRMED",
+  "head_sha": "92e68d2d1301117b1261a6f8c74bbc0e0e3a84ba",
+  "app": {
+    "id": 4669438,
+    "slug": "physshell-review-governor"
+  },
+  "fixture_hash": "56ac735131fe4479d4a2f1a3437b3c9b3050349a00ed8d98cc9544362c372dec",
+  "hash_in_output": true,
+  "patch_status": 200
+}

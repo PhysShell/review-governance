@@ -1,0 +1,45 @@
+{
+  "canonical_ruleset": {
+    "name": "ai-final-review-enforcement",
+    "target": "branch",
+    "enforcement": "active",
+    "bypass_actors": [],
+    "conditions": {
+      "ref_name": {
+        "include": [
+          "refs/heads/main"
+        ],
+        "exclude": []
+      }
+    },
+    "rules": [
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "required_status_checks": [
+            {
+              "context": "ai/final-review",
+              "integration_id": 4669438
+            }
+          ],
+          "strict_required_status_checks_policy": true
+        }
+      }
+    ]
+  },
+  "canonical_hash": "fd77f989384bc400967710aa5fa795418946b0b2a9022c9202e9d63a4506e813",
+  "created": false,
+  "note": "generated for review; A5b creates it DISABLED first, hashes the readback, then flips enforcement to active",
+  "conclusions_allowed": [
+    "success",
+    "failure",
+    "cancelled",
+    "action_required",
+    "timed_out"
+  ],
+  "conclusions_forbidden": [
+    "neutral",
+    "skipped"
+  ],
+  "statuses_permission": "remains ABSENT"
+}

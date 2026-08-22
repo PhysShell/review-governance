@@ -1,0 +1,13 @@
+{
+  "checked_at": "2026-08-22T10:24:50Z",
+  "heartbeat": {
+    "runtime": "primary-governor",
+    "at": "2026-08-22T10:24:50Z",
+    "monotonic": 103896.069998232
+  },
+  "heartbeat_age_seconds": 0.2,
+  "stale_after_seconds": 45,
+  "primary_stale": false,
+  "standing_successes": [],
+  "revocations": []
+}

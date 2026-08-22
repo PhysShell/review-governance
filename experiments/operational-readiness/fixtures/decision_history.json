@@ -1,0 +1,132 @@
+{
+  "chain": [
+    {
+      "decision_id": 1,
+      "epoch_id": "a5a-92e68d2d1301",
+      "head_sha": "92e68d2d1301117b1261a6f8c74bbc0e0e3a84ba",
+      "verdict": "SUCCESS",
+      "bundle_hash": "56ac735131fe4479d4a2f1a3437b3c9b3050349a00ed8d98cc9544362c372dec",
+      "bundle_schema": "ReadinessProbeEvidence-v1",
+      "decision_rule_revision": "a5a.1",
+      "auth_generation": 3,
+      "cause": "P1 baseline success",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T10:21:57Z",
+      "previous_decision_id": null
+    },
+    {
+      "decision_id": 2,
+      "epoch_id": "a5a-80ce2e7f0466",
+      "head_sha": "80ce2e7f0466ecd81fbca8761d7cda3246769582",
+      "verdict": "SUCCESS",
+      "bundle_hash": "5d336a9cae29825f1737d0af7efe4643e9fe19d5b9a4d7adcacb78ad9eb50f12",
+      "bundle_schema": "ReadinessProbeEvidence-v1",
+      "decision_rule_revision": "a5a.1",
+      "auth_generation": 3,
+      "cause": "P1 base mover",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T10:22:49Z",
+      "previous_decision_id": 1
+    },
+    {
+      "decision_id": 3,
+      "epoch_id": "a5a-e113e8a1dd75",
+      "head_sha": "e113e8a1dd75943002d42764cb213296dbb1206f",
+      "verdict": "SUCCESS",
+      "bundle_hash": "223bfc1d1732e4330d4608ee92eff04a4ef36af99b5960a2d1dd28c0ed6d7e8e",
+      "bundle_schema": "ReadinessProbeEvidence-v1",
+      "decision_rule_revision": "a5a.1",
+      "auth_generation": 3,
+      "cause": "P2 standing success before outage",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T10:23:44Z",
+      "previous_decision_id": 2
+    },
+    {
+      "decision_id": 4,
+      "epoch_id": "a5a-92e68d2d1301",
+      "head_sha": "92e68d2d1301117b1261a6f8c74bbc0e0e3a84ba",
+      "verdict": "EVIDENCE_INVALIDATED",
+      "bundle_hash": null,
+      "bundle_schema": "WatchdogIncident-v1",
+      "decision_rule_revision": "a5a.1",
+      "auth_generation": 0,
+      "cause": "GOVERNOR_UNAVAILABLE",
+      "invalidates_decision_id": 1,
+      "invalidates_bundle_hash": "56ac735131fe4479d4a2f1a3437b3c9b3050349a00ed8d98cc9544362c372dec",
+      "decided_at": "2026-08-22T10:24:31Z",
+      "previous_decision_id": 3
+    },
+    {
+      "decision_id": 5,
+      "epoch_id": "a5a-80ce2e7f0466",
+      "head_sha": "80ce2e7f0466ecd81fbca8761d7cda3246769582",
+      "verdict": "EVIDENCE_INVALIDATED",
+      "bundle_hash": null,
+      "bundle_schema": "WatchdogIncident-v1",
+      "decision_rule_revision": "a5a.1",
+      "auth_generation": 0,
+      "cause": "GOVERNOR_UNAVAILABLE",
+      "invalidates_decision_id": 2,
+      "invalidates_bundle_hash": "5d336a9cae29825f1737d0af7efe4643e9fe19d5b9a4d7adcacb78ad9eb50f12",
+      "decided_at": "2026-08-22T10:24:31Z",
+      "previous_decision_id": 4
+    },
+    {
+      "decision_id": 6,
+      "epoch_id": "a5a-e113e8a1dd75",
+      "head_sha": "e113e8a1dd75943002d42764cb213296dbb1206f",
+      "verdict": "EVIDENCE_INVALIDATED",
+      "bundle_hash": null,
+      "bundle_schema": "WatchdogIncident-v1",
+      "decision_rule_revision": "a5a.1",
+      "auth_generation": 0,
+      "cause": "GOVERNOR_UNAVAILABLE",
+      "invalidates_decision_id": 3,
+      "invalidates_bundle_hash": "223bfc1d1732e4330d4608ee92eff04a4ef36af99b5960a2d1dd28c0ed6d7e8e",
+      "decided_at": "2026-08-22T10:24:31Z",
+      "previous_decision_id": 5
+    }
+  ],
+  "projections": [
+    {
+      "epoch_id": "a5a-92e68d2d1301",
+      "head_sha": "92e68d2d1301117b1261a6f8c74bbc0e0e3a84ba",
+      "check_run_id": 97017961394,
+      "intended_conclusion": "failure",
+      "observed_conclusion": "failure",
+      "state": "CONFIRMED",
+      "decision_id": 4,
+      "attempted_at": "2026-08-22T10:24:31Z",
+      "confirmed_at": "2026-08-22T10:24:32Z",
+      "updated_at": "2026-08-22T10:24:32Z"
+    },
+    {
+      "epoch_id": "a5a-80ce2e7f0466",
+      "head_sha": "80ce2e7f0466ecd81fbca8761d7cda3246769582",
+      "check_run_id": 97018051491,
+      "intended_conclusion": "failure",
+      "observed_conclusion": "failure",
+      "state": "CONFIRMED",
+      "decision_id": 5,
+      "attempted_at": "2026-08-22T10:24:32Z",
+      "confirmed_at": "2026-08-22T10:24:34Z",
+      "updated_at": "2026-08-22T10:24:34Z"
+    },
+    {
+      "epoch_id": "a5a-e113e8a1dd75",
+      "head_sha": "e113e8a1dd75943002d42764cb213296dbb1206f",
+      "check_run_id": 97018144475,
+      "intended_conclusion": "failure",
+      "observed_conclusion": "failure",
+      "state": "CONFIRMED",
+      "decision_id": 6,
+      "attempted_at": "2026-08-22T10:24:34Z",
+      "confirmed_at": "2026-08-22T10:24:35Z",
+      "updated_at": "2026-08-22T10:24:35Z"
+    }
+  ]
+}

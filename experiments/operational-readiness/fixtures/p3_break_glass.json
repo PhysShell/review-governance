@@ -1,0 +1,51 @@
+{
+  "drill": "break-glass",
+  "canonical_hash_before": "f4a1f83bb99cb64f792f3c09c680b61278e3d00f13c3384d287b573a96182ebc",
+  "canonical_hash_after": "f4a1f83bb99cb64f792f3c09c680b61278e3d00f13c3384d287b573a96182ebc",
+  "hashes_identical": true,
+  "enforcement_before": "active",
+  "enforcement_during": "disabled",
+  "enforcement_after": "active",
+  "steps": [
+    {
+      "step": "incident_recorded",
+      "at": "2026-08-22T10:25:23Z",
+      "reason": "A5a break-glass drill (P3), no real emergency"
+    },
+    {
+      "step": "snapshot",
+      "at": "2026-08-22T10:25:23Z",
+      "ruleset_id": 21193128,
+      "canonical_hash": "f4a1f83bb99cb64f792f3c09c680b61278e3d00f13c3384d287b573a96182ebc",
+      "enforcement": "active"
+    },
+    {
+      "step": "enforcement_disabled",
+      "at": "2026-08-22T10:25:24Z",
+      "enforcement": "disabled"
+    },
+    {
+      "step": "exceptional_operation",
+      "at": "2026-08-22T10:25:24Z",
+      "performed": false,
+      "note": "drill only; nothing was merged or pushed while the gate was open"
+    },
+    {
+      "step": "restored",
+      "at": "2026-08-22T10:25:24Z",
+      "http_ok": true
+    },
+    {
+      "step": "readback_verified",
+      "at": "2026-08-22T10:25:25Z",
+      "canonical_hash": "f4a1f83bb99cb64f792f3c09c680b61278e3d00f13c3384d287b573a96182ebc",
+      "identical_to_snapshot": true,
+      "enforcement": "active"
+    },
+    {
+      "step": "closure_recorded",
+      "at": "2026-08-22T10:25:25Z",
+      "drill": true
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "checked_at": "2026-08-22T10:23:47Z",
+  "heartbeat": {
+    "runtime": "primary-governor",
+    "at": "2026-08-22T10:23:43Z",
+    "monotonic": 103829.160915499
+  },
+  "heartbeat_age_seconds": 4.4,
+  "stale_after_seconds": 45,
+  "primary_stale": false,
+  "standing_successes": [
+    {
+      "epoch_id": "a5a-92e68d2d1301",
+      "head_sha": "92e68d2d1301117b1261a6f8c74bbc0e0e3a84ba",
+      "check_run_id": 97017961394,
+      "decision_id": 1,
+      "bundle_hash": "56ac735131fe4479d4a2f1a3437b3c9b3050349a00ed8d98cc9544362c372dec"
+    },
+    {
+      "epoch_id": "a5a-80ce2e7f0466",
+      "head_sha": "80ce2e7f0466ecd81fbca8761d7cda3246769582",
+      "check_run_id": 97018051491,
+      "decision_id": 2,
+      "bundle_hash": "5d336a9cae29825f1737d0af7efe4643e9fe19d5b9a4d7adcacb78ad9eb50f12"
+    },
+    {
+      "epoch_id": "a5a-e113e8a1dd75",
+      "head_sha": "e113e8a1dd75943002d42764cb213296dbb1206f",
+      "check_run_id": 97018144475,
+      "decision_id": 3,
+      "bundle_hash": "223bfc1d1732e4330d4608ee92eff04a4ef36af99b5960a2d1dd28c0ed6d7e8e"
+    }
+  ],
+  "revocations": []
+}

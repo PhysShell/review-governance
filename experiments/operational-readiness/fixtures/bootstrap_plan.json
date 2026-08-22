@@ -1,0 +1,50 @@
+{
+  "observed_at": "2026-08-22T10:26:03Z",
+  "frozen_inventory": [
+    {
+      "pr_number": 12,
+      "head_sha": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+      "draft": true,
+      "branch": "claude/ai-final-review-governor-pilot-vohn85",
+      "observed_at": "2026-08-22T10:26:03Z"
+    },
+    {
+      "pr_number": 8,
+      "head_sha": "6d81a4d62e14a1f5a567903646e5deae49d03184",
+      "draft": false,
+      "branch": "claude/p-038-evm-from-scratch-0l73bd",
+      "observed_at": "2026-08-22T10:26:03Z"
+    }
+  ],
+  "planned_bootstrap": [
+    {
+      "pr_number": 12,
+      "head_sha": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+      "check": {
+        "name": "ai/final-review",
+        "app_id": 4669438,
+        "conclusion": "failure",
+        "verdict": "NOT_ESTABLISHED",
+        "output_summary": "Activation bootstrap.\nNo final-review evidence established for this head.\nFresh qualification required."
+      },
+      "provider_round": "NOT started",
+      "reason": "draft PRs stay failing and consume no provider quota"
+    },
+    {
+      "pr_number": 8,
+      "head_sha": "6d81a4d62e14a1f5a567903646e5deae49d03184",
+      "check": {
+        "name": "ai/final-review",
+        "app_id": 4669438,
+        "conclusion": "failure",
+        "verdict": "NOT_ESTABLISHED",
+        "output_summary": "Activation bootstrap.\nNo final-review evidence established for this head.\nFresh qualification required."
+      },
+      "provider_round": "NOT started",
+      "reason": "non-draft PRs are not auto-reviewed either; a provider round starts only on an explicit ACCEPT-CANDIDATE transition"
+    }
+  ],
+  "applied": false,
+  "production_context_used": false,
+  "note": "dry run; no check run was created and ai/final-review remains unused"
+}

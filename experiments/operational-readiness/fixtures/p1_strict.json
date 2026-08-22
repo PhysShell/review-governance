@@ -1,0 +1,23 @@
+{
+  "probe": "P1 strict base drift",
+  "pr": 25,
+  "head_a": "92e68d2d1301117b1261a6f8c74bbc0e0e3a84ba",
+  "base_before": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+  "base_after": "209749e2166617b83164c3391eaf15aea0cfa01b",
+  "base_moved": true,
+  "head_unchanged": true,
+  "success_on_head_confirmed": true,
+  "merge_blocked": true,
+  "merge_http_status": 405,
+  "merge_message": "Required status check \"ai/final-review-readiness-probe\" is expected.",
+  "note_on_message": "under strict, base drift reports the same wording as a missing check; GitHub does not distinguish them",
+  "direct_push_to_protected_ref": {
+    "attempted": true,
+    "rejected": true,
+    "message": "GH013 Repository rule violations found ... is expected.",
+    "finding": "a required-status-check ruleset blocks direct pushes too, not only merges"
+  },
+  "new_head": "e113e8a1dd75943002d42764cb213296dbb1206f",
+  "check_runs_on_new_head": 0,
+  "merge_on_new_head_blocked": true
+}
