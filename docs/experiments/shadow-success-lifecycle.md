@@ -135,9 +135,72 @@ For a **required** check the consequence is concrete: the check is green
 during that window, and a human can press Merge inside it. That is an input
 to the A4 design gate, not something A3b resolves.
 
+## Correction round A3b-c3 / A3b-c4 (probe PR #21)
+
+The first run proved a standing success is *revocable*; it did not prove
+the Governor never knowingly leaves one standing. Two gaps were closed.
+
+**c3 — pre-request invalidation.** In the first run the new Codex request
+was posted at `07:19:52` and the success was revoked at `07:20:49`: the
+green verdict stood for ~57 seconds after the Governor itself performed
+the act that made its basis non-current. Ordering is now structural — a
+plain `trigger` is refused while a success stands, and the only path to a
+new round is `rerun`, which invalidates, patches, confirms, and only then
+asks the provider. Live, on head `d20d3706…`:
+
+```text
+invalidation_decided_at        08:50:47Z
+failure_patch_attempted_at     08:50:47Z
+failure_confirmed_at           08:50:49Z   (projection CONFIRMED, observed failure)
+provider_request_created_at    08:50:49Z   (comment 5379406791)
+```
+
+The last two collide at GitHub's one-second resolution, so strictness is
+**not** claimed from those stamps. It rests on the local monotonic gap
+measured around the calls — `1.434 s` between confirmation and the request
+— and is corroborated independently by GitHub's own clock, where the check
+run's `completed_at` (`08:50:47Z`, conclusion `failure`,
+`Governor: EVIDENCE_INVALIDATED`) precedes the request's `created_at`
+(`08:50:49Z`). If the provider POST's outcome had been indeterminate, the
+recorded state would be `REQUEST_OUTCOME_UNKNOWN` with the check left
+failing; the old success is never restored automatically.
+
+**c4 — projection confirmation.** Publication previously treated the PATCH
+response body as proof. Projections now carry `PENDING` → `CONFIRMED` /
+`OUTCOME_UNKNOWN` / `FAILED`, and every write runs one path: durable
+decision → `PENDING` → PATCH → **independent GET of that exact run** →
+settle. Live: run `97008202609` reached `CONFIRMED` only after the readback
+returned `success` with matching head, app, `external_id` and bundle hash.
+
+Adversarially: a lost PATCH response with a readback showing `success`
+settles `CONFIRMED`; a PATCH that never took effect settles `FAILED`; an
+unreadable run settles `OUTCOME_UNKNOWN` and never resolves upward.
+
+**Terminology fixed with it.** Two questions that must never share a
+variable:
+
+```text
+external_success_may_exist   GitHub may be showing green right now
+                             -> the Governor must clean up before acting
+effective_gate_validity      ESTABLISHED only for a confirmed success
+                             -> every uncertain projection is NOT_ESTABLISHED
+```
+
+`may_authorize_action` is the only field that may gate an action, and it is
+true solely for a confirmed success. An unsettled projection carries an
+explicit hazard note: it is *neither* an established success *nor* an
+established revocation. Without that split, a well-meaning
+`if standing_success:` eventually becomes permission.
+
 ## Result
 
 ```text
+PRE_REQUEST_SUCCESS_INVALIDATION       PASS (live)
+REQUEST_OUTCOME_UNKNOWN_FAIL_CLOSED    PASS (offline)
+PROJECTION_PENDING_STATE               PASS
+PROJECTION_EXACT_READBACK              PASS (live)
+AMBIGUOUS_PROJECTION_RECONCILIATION    PASS (offline)
+
 FRESH_POSITIVE_BUNDLE                  PASS
 PRE_PUBLICATION_GUARD                  PASS
 DURABLE_SUCCESS_DECISION               PASS
@@ -159,7 +222,7 @@ TOCTOU_WINDOW_RECORDED                 PASS
 GOVERNOR_SHADOW_SUCCESS_CONTRACT: PASS
 ```
 
-50 tests pass (17 adversarial + 33 live replay); secret scan clean.
+61 tests pass (17 adversarial + 33 live replay + 11 c3/c4 adversarial and live); secret scan clean.
 
 ## What this DOES prove
 
@@ -181,7 +244,9 @@ GOVERNOR_SHADOW_SUCCESS_CONTRACT: PASS
 - Nothing about enforcement. The check was never required; no ruleset,
   branch protection, auto-merge or expected-source enforcement exists.
 - Not that revocation is timely under adversarial conditions: detection was
-  an explicit call, not a race against a merge button.
+  an explicit call, not a race against a merge button. c3 removes the case
+  where the Governor *itself* causes the invalidation — it says nothing
+  about invalidation arriving from outside.
 - Not that the wording heuristics for "advisory positive" are stable — they
   are today's provider phrasings, not a contract.
 - Not multi-repo, multi-PR or concurrent-worker behaviour; one PR, one
@@ -197,10 +262,12 @@ frozen bundle -> guard -> durable decision -> published success (+hash, +head)
              -> head change -> cancelled, new head fails closed
 ```
 
-The lower and middle parts of the chain now exist end to end. The remaining
-gap is not "can the light be turned off" but "can it be turned off before
-someone acts on it" — which is a merge-semantics problem, not a Checks API
-problem.
+The lower and middle parts of the chain now exist end to end, and the
+Governor no longer creates its own window: any invalidation it causes is
+published and confirmed before the cause exists. The remaining gap is not
+"can the light be turned off" but "can it be turned off before someone acts
+on it" when the cause comes from outside — a merge-semantics problem, not a
+Checks API problem.
 
 ## Next gate
 
@@ -210,6 +277,20 @@ A4-design (gated, separate decision): TOCTOU and merge semantics
     - expected-source enforcement (which App may satisfy the check)
     - what happens to an in-flight merge when a success is revoked
     - whether a shadow-to-required transition needs a quiet period
+
+  Constraints already known and to be verified there, not assumed:
+    - a required check binds to the latest commit SHA; a green older head
+      does not satisfy a new one
+    - success, skipped and neutral all count as passing for required
+      checks, which is why excluding neutral/skipped structurally was a
+      necessity rather than taste
+    - expected-source exists (a required check can be bound to a specific
+      App via the ruleset integration_id), but selecting an App reportedly
+      requires statuses: write and a recent check run — the Governor holds
+      checks: write only, so this needs its own qualification rather than a
+      quiet permission widening
+    - ruleset Evaluate mode must be measured on this account rather than
+      assumed available
 
 A4 (gated): required check / expected source enforcement
 ```
