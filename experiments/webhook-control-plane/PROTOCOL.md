@@ -115,6 +115,42 @@ never read as a passing gate. In A2a the reducer has **no code path to
 
    Whichever is chosen, the receiver stays **first-party**: no third-party
    collector stores, displays or replays payloads.
+
+   **Decision (owner, 2026-08-22):**
+
+   ```text
+   TRANSPORT: Cloudflare Quick Tunnel
+   TRUST STATUS:
+     - receiver: first-party
+     - transport: third-party
+     - payload confidentiality from Cloudflare: NOT PROVIDED
+     - payload authenticity: enforced locally by GitHub HMAC
+     - payload persistence by Cloudflare: not relied upon / not part of evidence
+   ```
+
+   This does not breach the earlier prohibition in its substantive sense:
+   what was forbidden is a third-party webhook *collector* that receives and
+   stores payloads as the terminal system. A Quick Tunnel is transport to
+   our own receiver; HMAC is verified by us, so Cloudflare cannot silently
+   fabricate a valid GitHub delivery. It can see plaintext payloads after
+   TLS termination, which is recorded above as a trust boundary rather than
+   waved away. Tailscale Funnel is stronger on confidentiality but adds a
+   configuration plane unrelated to the contract under measurement.
+   Cloudflare Quick Tunnel is **not** a production candidate: production
+   needs a stable first-party endpoint with real secret storage and
+   observability.
+
+   Live sequence, including teardown:
+
+   ```text
+   1. start the receiver locally
+   2. cloudflared tunnel --url http://127.0.0.1:<port>
+   3. obtain the ephemeral *.trycloudflare.com URL
+   4. set that URL as the App webhook URL (owner, UI)
+   5. run A2a captures
+   6. afterwards remove the webhook URL, returning the App to
+      "no receiver" state
+   ```
 3. **Webhook configuration** (manual, owner): set the App's webhook URL and
    a freshly generated secret. The secret goes to `~/.config/review-governor/`
    at 0600 and never into the repo, chat, or evidence. Subscribed events
