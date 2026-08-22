@@ -1,0 +1,16 @@
+{
+  "changed": true,
+  "old": {
+    "check_run_id": 96998302115,
+    "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+    "conclusion": "cancelled",
+    "http_status": 200
+  },
+  "new": {
+    "check_run_id": 96998879863,
+    "head_sha": "561b7f72bbdafbce63a844fb709ccf5e5b44b4dd",
+    "conclusion": "failure",
+    "external_id": "epoch-78deabcd44a7b0f6",
+    "http_status": 200
+  }
+}

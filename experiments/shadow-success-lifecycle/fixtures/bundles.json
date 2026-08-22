@@ -1,0 +1,152 @@
+{
+  "bundle_1": {
+    "bundle_version": "PositiveEvidenceBundle-v1",
+    "epoch_id": "epoch-d6743339efed1671",
+    "epoch_generation": 1,
+    "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+    "auth_generation": 3,
+    "decision_rule_revision": "a3b.1",
+    "requests": {
+      "codex": {
+        "provider_request_id": "epoch-d6743339efed1671:codex:g1",
+        "request_generation": 1,
+        "epoch_id": "epoch-d6743339efed1671",
+        "auth_generation": 3,
+        "head_at_request": "448dd46f9d73b0c15e15057f48651fda7c2b7048"
+      },
+      "coderabbit": {
+        "provider_request_id": "epoch-d6743339efed1671:coderabbit:g2",
+        "request_generation": 2,
+        "epoch_id": "epoch-d6743339efed1671",
+        "auth_generation": 3,
+        "head_at_request": "448dd46f9d73b0c15e15057f48651fda7c2b7048"
+      }
+    },
+    "observations": {
+      "codex": {
+        "provider": "codex",
+        "state": "CODEX_ADVISORY_POSITIVE",
+        "qualified": true,
+        "reasons": [],
+        "request_comment_id": 5378530323,
+        "request_carrier": "app_mediated_user",
+        "terminal_comment": {
+          "id": 5378547179,
+          "created_at": "2026-08-22T06:38:19Z",
+          "updated_at": "2026-08-22T06:38:19Z",
+          "actor_id": 199175422,
+          "body_hash": "b92e8f5af9df0586ef5d2b15970890ed6678dd79d8dcda4477aa9ed70aebfc5c",
+          "attested_prefix": "448dd46f9d",
+          "resolved_full_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+          "carrier_kind": "mutable_advisory_carrier"
+        },
+        "findings_seen": {
+          "reviews": 0,
+          "inline": 0
+        }
+      },
+      "coderabbit": {
+        "provider": "coderabbit",
+        "state": "CODERABBIT_ADVISORY_POSITIVE",
+        "qualified": true,
+        "reasons": [],
+        "request_comment_id": 5378954969,
+        "request_carrier": "app_mediated_user",
+        "acknowledged": true,
+        "mutable_advisory_carrier": {
+          "id": 5378529063,
+          "created_at": "2026-08-22T06:36:39Z",
+          "updated_at": "2026-08-22T07:13:58Z",
+          "actor_id": 136622811,
+          "body_hash": "e8287ead4a19ddab5d7be7c82fa8c4ff1b741feec4b6e754c98b63da095cd6cf",
+          "review_range": {
+            "from": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+            "to": "448dd46f9d73b0c15e15057f48651fda7c2b7048"
+          }
+        },
+        "findings_seen": {
+          "reviews": 0,
+          "inline": 0
+        },
+        "note": "check-run status is never used as cleanliness evidence"
+      }
+    },
+    "inventory_cutoff": "2026-08-22T07:17:14Z",
+    "evidence_hash": "01e8ed0927c5dbc49ae42049cc14a288c79a4cc9349f7240027f9fc5d0920c1b"
+  },
+  "bundle_2": {
+    "bundle_version": "PositiveEvidenceBundle-v1",
+    "epoch_id": "epoch-d6743339efed1671",
+    "epoch_generation": 1,
+    "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+    "auth_generation": 3,
+    "decision_rule_revision": "a3b.1",
+    "requests": {
+      "codex": {
+        "provider_request_id": "epoch-d6743339efed1671:codex:g2",
+        "request_generation": 2,
+        "epoch_id": "epoch-d6743339efed1671",
+        "auth_generation": 3,
+        "head_at_request": "448dd46f9d73b0c15e15057f48651fda7c2b7048"
+      },
+      "coderabbit": {
+        "provider_request_id": "epoch-d6743339efed1671:coderabbit:g2",
+        "request_generation": 2,
+        "epoch_id": "epoch-d6743339efed1671",
+        "auth_generation": 3,
+        "head_at_request": "448dd46f9d73b0c15e15057f48651fda7c2b7048"
+      }
+    },
+    "observations": {
+      "codex": {
+        "provider": "codex",
+        "state": "CODEX_ADVISORY_POSITIVE",
+        "qualified": true,
+        "reasons": [],
+        "request_comment_id": 5378980915,
+        "request_carrier": "app_mediated_user",
+        "terminal_comment": {
+          "id": 5378986295,
+          "created_at": "2026-08-22T07:21:19Z",
+          "updated_at": "2026-08-22T07:21:19Z",
+          "actor_id": 199175422,
+          "body_hash": "7dee50e039ef26a6894f4c8099ff088a87896b360b69b471ae54cf894a9fac0e",
+          "attested_prefix": "448dd46f9d",
+          "resolved_full_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+          "carrier_kind": "mutable_advisory_carrier"
+        },
+        "findings_seen": {
+          "reviews": 0,
+          "inline": 0
+        }
+      },
+      "coderabbit": {
+        "provider": "coderabbit",
+        "state": "CODERABBIT_ADVISORY_POSITIVE",
+        "qualified": true,
+        "reasons": [],
+        "request_comment_id": 5378954969,
+        "request_carrier": "app_mediated_user",
+        "acknowledged": true,
+        "mutable_advisory_carrier": {
+          "id": 5378529063,
+          "created_at": "2026-08-22T06:36:39Z",
+          "updated_at": "2026-08-22T07:21:10Z",
+          "actor_id": 136622811,
+          "body_hash": "e8287ead4a19ddab5d7be7c82fa8c4ff1b741feec4b6e754c98b63da095cd6cf",
+          "review_range": {
+            "from": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+            "to": "448dd46f9d73b0c15e15057f48651fda7c2b7048"
+          }
+        },
+        "findings_seen": {
+          "reviews": 0,
+          "inline": 0
+        },
+        "note": "check-run status is never used as cleanliness evidence"
+      }
+    },
+    "inventory_cutoff": "2026-08-22T07:22:09Z",
+    "evidence_hash": "ef6f89dd74d498913517e7f61a6d452d69652939fba795acced6eec59d0dba46"
+  }
+}

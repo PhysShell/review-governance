@@ -1,0 +1,58 @@
+{
+  "chain": [
+    {
+      "decision_id": 1,
+      "epoch_id": "epoch-42d70fbf63dd30bd",
+      "head_sha": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+      "verdict": "SUCCESS",
+      "bundle_hash": "e4009b2d8f9e9ed6585e7b2e585a79c8a8659b9b01b6e81b7a2ea392e27304d2",
+      "bundle_schema": "PositiveEvidenceBundle-v1",
+      "decision_rule_revision": "a3b.1",
+      "auth_generation": 3,
+      "cause": null,
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T08:50:28Z",
+      "previous_decision_id": null
+    },
+    {
+      "decision_id": 2,
+      "epoch_id": "epoch-42d70fbf63dd30bd",
+      "head_sha": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+      "verdict": "EVIDENCE_INVALIDATED",
+      "bundle_hash": null,
+      "bundle_schema": "PositiveEvidenceBundle-v1",
+      "decision_rule_revision": "a3b.1",
+      "auth_generation": 3,
+      "cause": "rerun_requested_pre_request_invalidation",
+      "invalidates_decision_id": 1,
+      "invalidates_bundle_hash": "e4009b2d8f9e9ed6585e7b2e585a79c8a8659b9b01b6e81b7a2ea392e27304d2",
+      "decided_at": "2026-08-22T08:50:47Z",
+      "previous_decision_id": 1
+    }
+  ],
+  "projections": [
+    {
+      "epoch_id": "epoch-42d70fbf63dd30bd",
+      "head_sha": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+      "check_run_id": 97008202609,
+      "intended_conclusion": "failure",
+      "observed_conclusion": "failure",
+      "state": "CONFIRMED",
+      "decision_id": 2,
+      "attempted_at": "2026-08-22T08:50:47Z",
+      "confirmed_at": "2026-08-22T08:50:49Z",
+      "updated_at": "2026-08-22T08:50:49Z"
+    }
+  ],
+  "replayed": {
+    "epoch-42d70fbf63dd30bd": {
+      "epoch_id": "epoch-42d70fbf63dd30bd",
+      "head_sha": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+      "verdict": "EVIDENCE_INVALIDATED",
+      "bundle_hash": null,
+      "decision_id": 2,
+      "decided_at": "2026-08-22T08:50:47Z"
+    }
+  }
+}

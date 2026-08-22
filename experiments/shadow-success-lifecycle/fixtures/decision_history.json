@@ -1,0 +1,115 @@
+{
+  "chain": [
+    {
+      "decision_id": 1,
+      "epoch_id": "epoch-d6743339efed1671",
+      "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+      "verdict": "SUCCESS",
+      "bundle_hash": "01e8ed0927c5dbc49ae42049cc14a288c79a4cc9349f7240027f9fc5d0920c1b",
+      "bundle_schema": "PositiveEvidenceBundle-v1",
+      "decision_rule_revision": "a3b.1",
+      "auth_generation": 3,
+      "cause": null,
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T07:19:32Z",
+      "previous_decision_id": null
+    },
+    {
+      "decision_id": 2,
+      "epoch_id": "epoch-d6743339efed1671",
+      "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+      "verdict": "EVIDENCE_INVALIDATED",
+      "bundle_hash": null,
+      "bundle_schema": "PositiveEvidenceBundle-v1",
+      "decision_rule_revision": "a3b.1",
+      "auth_generation": 3,
+      "cause": "newer_provider_request_generation",
+      "invalidates_decision_id": 1,
+      "invalidates_bundle_hash": "01e8ed0927c5dbc49ae42049cc14a288c79a4cc9349f7240027f9fc5d0920c1b",
+      "decided_at": "2026-08-22T07:20:48Z",
+      "previous_decision_id": 1
+    },
+    {
+      "decision_id": 3,
+      "epoch_id": "epoch-d6743339efed1671",
+      "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+      "verdict": "SUCCESS",
+      "bundle_hash": "ef6f89dd74d498913517e7f61a6d452d69652939fba795acced6eec59d0dba46",
+      "bundle_schema": "PositiveEvidenceBundle-v1",
+      "decision_rule_revision": "a3b.1",
+      "auth_generation": 3,
+      "cause": null,
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T07:24:18Z",
+      "previous_decision_id": 2
+    },
+    {
+      "decision_id": 4,
+      "epoch_id": "epoch-d6743339efed1671",
+      "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+      "verdict": "STALE",
+      "bundle_hash": null,
+      "bundle_schema": "PositiveEvidenceBundle-v1",
+      "decision_rule_revision": "a3b.1",
+      "auth_generation": 3,
+      "cause": "head_superseded",
+      "invalidates_decision_id": 3,
+      "invalidates_bundle_hash": "ef6f89dd74d498913517e7f61a6d452d69652939fba795acced6eec59d0dba46",
+      "decided_at": "2026-08-22T07:24:55Z",
+      "previous_decision_id": 3
+    },
+    {
+      "decision_id": 5,
+      "epoch_id": "epoch-78deabcd44a7b0f6",
+      "head_sha": "561b7f72bbdafbce63a844fb709ccf5e5b44b4dd",
+      "verdict": "NOT_ESTABLISHED",
+      "bundle_hash": null,
+      "bundle_schema": "PositiveEvidenceBundle-v1",
+      "decision_rule_revision": "a3b.1",
+      "auth_generation": 3,
+      "cause": "no provider evidence on the new head",
+      "invalidates_decision_id": null,
+      "invalidates_bundle_hash": null,
+      "decided_at": "2026-08-22T07:24:57Z",
+      "previous_decision_id": 4
+    }
+  ],
+  "projections": [
+    {
+      "epoch_id": "epoch-d6743339efed1671",
+      "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+      "check_run_id": 96998302115,
+      "conclusion": "cancelled",
+      "decision_id": 4,
+      "updated_at": "2026-08-22T07:24:57Z"
+    },
+    {
+      "epoch_id": "epoch-78deabcd44a7b0f6",
+      "head_sha": "561b7f72bbdafbce63a844fb709ccf5e5b44b4dd",
+      "check_run_id": 96998879863,
+      "conclusion": "failure",
+      "decision_id": 5,
+      "updated_at": "2026-08-22T07:24:59Z"
+    }
+  ],
+  "replayed": {
+    "epoch-d6743339efed1671": {
+      "epoch_id": "epoch-d6743339efed1671",
+      "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+      "verdict": "STALE",
+      "bundle_hash": null,
+      "decision_id": 4,
+      "decided_at": "2026-08-22T07:24:55Z"
+    },
+    "epoch-78deabcd44a7b0f6": {
+      "epoch_id": "epoch-78deabcd44a7b0f6",
+      "head_sha": "561b7f72bbdafbce63a844fb709ccf5e5b44b4dd",
+      "verdict": "NOT_ESTABLISHED",
+      "bundle_hash": null,
+      "decision_id": 5,
+      "decided_at": "2026-08-22T07:24:57Z"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "check_run": {
+    "id": 97008202609,
+    "head_sha": "d20d370668a045c7c15adba3dd40d27d0157cfe9",
+    "conclusion": "failure",
+    "status": "completed",
+    "completed_at": "2026-08-22T08:50:47Z",
+    "external_id": "epoch-42d70fbf63dd30bd",
+    "app": {
+      "id": 4669438,
+      "slug": "physshell-review-governor"
+    },
+    "output_title": "Governor: EVIDENCE_INVALIDATED"
+  },
+  "provider_request_comment": {
+    "id": 5379406791,
+    "created_at": "2026-08-22T08:50:49Z",
+    "user": {
+      "login": "PhysShell",
+      "id": 45852143
+    },
+    "via": "physshell-review-governor",
+    "body": "@codex review"
+  },
+  "server_side_corroboration": {
+    "check_completed_at": "2026-08-22T08:50:47Z",
+    "request_created_at": "2026-08-22T08:50:49Z",
+    "check_not_after_request": true,
+    "note": "GitHub stamps are second-resolution; strict ordering is established by local monotonic measurement, this only corroborates"
+  }
+}

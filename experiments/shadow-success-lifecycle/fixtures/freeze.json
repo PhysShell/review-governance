@@ -1,0 +1,18 @@
+{
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 20,
+  "base_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+  "head_sha": "448dd46f9d73b0c15e15057f48651fda7c2b7048",
+  "epoch": {
+    "epoch_id": "epoch-d6743339efed1671",
+    "generation": 1,
+    "state": "CURRENT"
+  },
+  "auth": {
+    "generation": 3,
+    "label": "G3",
+    "state": "AUTHORIZED",
+    "carrier": "app_mediated_user"
+  },
+  "decision_rule_revision": "a3b.1"
+}
