@@ -1,0 +1,28 @@
+{
+  "app": {
+    "id": 4669438,
+    "slug": "physshell-review-governor",
+    "owner": "PhysShell"
+  },
+  "app_permissions": {
+    "checks": "write",
+    "issues": "write",
+    "metadata": "read",
+    "pull_requests": "write"
+  },
+  "installation": {
+    "id": 155393018,
+    "repository_selection": "selected",
+    "permissions": {
+      "checks": "write",
+      "issues": "write",
+      "metadata": "read",
+      "pull_requests": "write"
+    },
+    "events": [
+      "pull_request"
+    ]
+  },
+  "statuses_permission_present": false,
+  "checks_permission": "write"
+}
