@@ -191,17 +191,40 @@ main              047ff1a641e3…, unprotected, untouched
 open PRs on main  #8 6d81a4d62e14…, #12 e29621f54a63… — unchanged
 ```
 
+## Owner decisions (taken after this report, amendment A5a-c1)
+
+```text
+DECISION 1  stable HTTPS endpoint on a small dedicated VPS
+            polling retained as mandatory reconciliation/fallback, but no
+            longer the primary healthy-path detector
+DECISION 2  the watchdog runs on that same edge host — separate OS, network
+            and failure domain, no user OAuth, failure-only capability
+```
+
+Polling-only was rejected as a production baseline for a reason that is
+about the watchdog rather than webhooks: a second failure domain is needed
+regardless, and once that host exists a fixed HTTPS endpoint is nearly free
+on top of it. Polling survives as an official **degradation mode** —
+`WEBHOOK_DOWN` slows detection to the poll interval, and does not open the
+gate or justify break-glass.
+
+The design that follows was implemented in this stage and is ready to
+deploy: an inverted heartbeat (the primary POSTs signed liveness outbound
+every 15 s, so the watchdog never asks a dead process whether it is dead);
+a watchdog that reads GitHub as a **cleanup surface and never as policy
+truth**, licensed by the asymmetry that a false-positive revoke is safe
+while a false-positive success is not; a cold-start rule that refuses to
+reconstruct `SUCCESS` from GitHub after losing durable state; and an edge
+schema with nowhere to store a verdict. See
+`docs/runbooks/edge-deployment.md`.
+
 ## What must happen before A5b
 
-1. Provision a stable first-party HTTPS endpoint and re-run the two blocked
-   webhook rows, or explicitly accept a **polling-only v1** and restate the
-   detection SLO in terms of the poll interval. Either is a decision, not a
-   default.
-2. Decide where the watchdog runs. In this stage it was a separate process
-   on the same host, which is a separate *runtime* but not a separate
-   *failure domain* — good enough to prove the mechanism, not good enough
-   to survive the host dying.
-3. Then A5b, whose sequence is already fixed: freeze inventory → verify
+1. Provision the VPS per `docs/runbooks/edge-deployment.md` and run the
+   **A5a-c1** qualification, which closes the three blocked rows plus
+   `INDEPENDENT_FAILURE_DOMAIN_WATCHDOG`. The architectural decision alone
+   does not promote A5a to `READY_FOR_CUTOVER`; the live run does.
+2. Then A5b, whose sequence is already fixed: freeze inventory → verify
    primary, watchdog, auth and reconciliation healthy → bootstrap every open
    PR to `failure` → create the ruleset **disabled** → readback and hash →
    flip to active → readback → disposable PR to `main` with no check must be
