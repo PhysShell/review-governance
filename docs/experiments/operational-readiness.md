@@ -7,14 +7,15 @@ Preregistered protocol: `experiments/operational-readiness/PROTOCOL.md`.
 ## Result
 
 ```text
-A5_OPERATIONAL_READINESS: BLOCKED
+A5_OPERATIONAL_READINESS: READY_FOR_CUTOVER
 PRODUCTION_ENFORCEMENT: NOT_READY
 ```
 
-Blocked on exactly one thing: **there is no stable first-party webhook
-endpoint**, and this environment cannot provide one. Everything else in the
-matrix was demonstrated, including the two invariants this stage existed
-for. The blocker is infrastructure, not design.
+The blocker recorded in the first pass — no stable first-party webhook
+endpoint — was closed by amendment **A5a-c1**: a dedicated edge VPS now
+serves the endpoint and hosts the watchdog in its own failure domain.
+Every acceptance row is demonstrated live; the A5a-c1 section below carries
+that evidence.
 
 ## The two headline invariants
 
@@ -118,7 +119,7 @@ reviews per open PR on activation day.
 Verified after the dry run: `ai/final-review` check runs found on those
 heads — **0**; rulesets targeting `main` — **0**.
 
-## The blocker
+## The blocker (as it stood before A5a-c1)
 
 ```text
 STABLE_FIRST_PARTY_WEBHOOK_ENDPOINT: BLOCKED
@@ -153,13 +154,14 @@ which is the same trust question A2a already answered once.
 ## Acceptance matrix
 
 ```text
-STABLE_FIRST_PARTY_WEBHOOK_ENDPOINT   BLOCKED   no public endpoint in this environment
-WEBHOOK_DURABLE_BEFORE_ACK            BLOCKED   depends on the endpoint
-FAILED_DELIVERY_RECONCILIATION        BLOCKED   depends on the endpoint
-MISSED_EVENT_RECOVERY                 PASS      whole stage ran with no receiver at all
-HEALTHY_DETECTION_SLO                 PARTIAL   revocation ~1 s and outage->revoked 35 s
-                                                observed; webhook-path P99 unmeasurable
+STABLE_FIRST_PARTY_WEBHOOK_ENDPOINT   PASS      https://192-248-184-141.sslip.io, TLS on the VPS
+WEBHOOK_DURABLE_BEFORE_ACK            PASS      three live 202s, each with a stored row
+FAILED_DELIVERY_RECONCILIATION        PASS      dropped delivery, drift found in 2.4 s
+MISSED_EVENT_RECOVERY                 PASS      reconciliation never consults the spool
+HEALTHY_DETECTION_SLO                 PASS      revocation ~1 s, outage->revoked 35 s,
+                                                reconciliation 2.4 s vs a 30 s budget
 INDEPENDENT_WATCHDOG                  PASS
+INDEPENDENT_FAILURE_DOMAIN_WATCHDOG   PASS      separate host, OS and network (A5a-c1)
 PRIMARY_OUTAGE_REVOKES_SUCCESS        PASS      35 s, all three successes
 WATCHDOG_REVOCATION_CONFIRMED         PASS      independent readback per run
 NO_AUTOMATIC_SUCCESS_RESTORE          PASS      live and offline
@@ -175,10 +177,10 @@ DRAFT_DOES_NOT_TRIGGER_PROVIDERS      PASS      #12 planned failing, no round
 PRODUCTION_RULESET_CANONICALIZED      PASS      hash fd77f989…
 PRODUCTION_CONTEXT_STILL_UNUSED       PASS      0 check runs, 0 rulesets on main
 
-A5_OPERATIONAL_READINESS: BLOCKED
+A5_OPERATIONAL_READINESS: READY_FOR_CUTOVER
 ```
 
-18 tests pass; secret scan clean.
+35 tests pass; secret scan clean.
 
 ## Teardown
 
@@ -240,3 +242,101 @@ read back (A3b-c4); a standing success is extinguished and confirmed before
 the Governor causes its invalidation (A3b-c3); the Governor holds no
 `statuses` permission and writes only Check Runs (A4a-1); `neutral` and
 `skipped` are never written (A4-live).
+
+
+## A5a-c1 — external failure domain, live
+
+The edge VPS (Arch, `192.248.184.141`) runs the pushed code byte-identically
+— `edge_service.py`, `edge_watchdog.py`, `edge_store.py` all match the
+repository by sha256 — under systemd with `ProtectSystem=strict` and
+`NoNewPrivileges`, behind Caddy terminating Let's Encrypt TLS and proxying
+to `127.0.0.1:8931`.
+
+### Key delivery
+
+The App key was streamed from the primary straight into its final path, so
+it never existed as a separate file on the VPS and no `shred` was relied on
+(which on journalling and copy-on-write filesystems promises more than it
+delivers).
+
+```text
+app.pem            0600 governor-edge:governor-edge
+public fingerprint 45e1536b38d315ca   — identical to the primary's
+GET /app           200 physshell-review-governor (4669438)
+installation token minted successfully
+```
+
+The edge needs this same App's authority because GitHub only lets the App
+that *created* a check run update it: a separate minimal watchdog App could
+not revoke the Governor's checks at all. The blast radius is therefore
+forced by the platform, not chosen for convenience.
+
+### Endpoint and heartbeat
+
+```text
+GET  /healthz              200 over HTTPS, valid chain
+POST /github/webhook       401 when unsigned — verification before anything else
+heartbeat primary -> edge  202, recorded server-side
+```
+
+The webhook secret was set **from the VPS itself** via `PATCH
+/app/hook/config` under an App JWT, so it never traversed the primary or a
+human's clipboard.
+
+### Watchdog across a real failure boundary
+
+```text
+standing success on the probe head, mergeStateStatus CLEAN
+primary heartbeat process SIGKILLed
+edge, entirely on its own: heartbeat age 321.9 s > 45 s -> primary stale
+success -> failure, patch 200, independent readback CONFIRMED
+GitHub check title: "Governor: EVIDENCE_INVALIDATED (edge watchdog)"
+merge attempt -> BLOCKED, 405 "is failing"
+primary returns -> revocations 0, success NOT restored
+edge incident #1 recorded: stale_age 322 s, affected [98026540146]
+```
+
+### Webhook rows
+
+Once the owner re-enabled **Active** — there is no REST API for that toggle,
+as with event subscriptions — deliveries flowed immediately:
+
+```text
+check_suite.requested   OK 202   stored on the edge
+pull_request.opened     OK 202   stored on the edge
+pull_request.synchronize OK 202  stored, then marked DROPPED on purpose
+```
+
+Every 202 has a durably stored row with a body hash; the ordering itself is
+structural in `handle_webhook` and asserted by test.
+
+### Missed delivery
+
+```text
+delivery 79370be0… marked DROPPED, never processed
+reconciliation: stored head da4138ae… vs GitHub head 771896fe…
+drift detected in 2.372 s (budget 30 s), current head reported unreviewed
+source: GitHub read; the edge delivery spool was not consulted
+```
+
+The independence matters more than the latency: had reconciliation asked
+the spool, a delivery that never arrived would have been invisible to the
+very mechanism meant to catch it.
+
+### Two harness defects the live run exposed
+
+- `edge_watchdog` had no `--context` flag, so it could only police the
+  production context — a probe context could not be qualified without
+  repointing production at it. The first watch ran a full window and
+  revoked nothing for exactly this reason.
+- `cmd_watch` returned a hardcoded `primary_stale: false` when its window
+  expired, hiding whatever it had actually observed.
+
+Both fixed and redeployed with hashes re-verified.
+
+### Teardown
+
+Probe PRs #27 and #28 closed without merge; both isolated refs and the
+probe ruleset deleted (repository ruleset inventory back to 0); check runs
+preserved as commit-bound evidence; `main` still `047ff1a641e3…`,
+unprotected, untouched; the open PRs on `main` remain #8 and #12.

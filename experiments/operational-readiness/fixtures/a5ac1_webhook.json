@@ -1,0 +1,54 @@
+{
+  "probe": "A5a-c1 webhook rows",
+  "captured_at": "2026-08-26T01:30:00Z",
+  "endpoint": "https://192-248-184-141.sslip.io/github/webhook",
+  "webhook_activated_by_owner": true,
+  "live_deliveries": [
+    {
+      "guid": "487f1f60-a0ed",
+      "event": "check_suite",
+      "action": "requested",
+      "github_status": "OK",
+      "code": 202,
+      "edge_row": true
+    },
+    {
+      "guid": "497bf5f0-a0ed",
+      "event": "pull_request",
+      "action": "opened",
+      "github_status": "OK",
+      "code": 202,
+      "edge_row": true
+    },
+    {
+      "guid": "79370be0-a0ed",
+      "event": "pull_request",
+      "action": "synchronize",
+      "code": 202,
+      "edge_row": true,
+      "processing_state": "DROPPED (deliberate)"
+    }
+  ],
+  "durable_before_ack": {
+    "evidence": "every 202 has a corresponding durably stored row with a body hash; the ordering itself is structural in edge_service.handle_webhook (record_delivery precedes the return) and asserted by test",
+    "rows_present": true
+  },
+  "missed_delivery_reconciliation": {
+    "dropped_guid": "79370be0-a0ed",
+    "dropped_state": "DROPPED",
+    "stored_head": "da4138aee9f4d021a1e5f09f2c2c3fed1a0c66aa",
+    "github_head": "771896fee8e92c3aae18024deac8ae4b2d48448e",
+    "drift_detected": true,
+    "elapsed_seconds": 2.372,
+    "budget_seconds": 30,
+    "within_budget": true,
+    "source": "GitHub read; the edge delivery spool was not consulted",
+    "current_head_is_unreviewed": true
+  },
+  "teardown": {
+    "probe_pr_closed_without_merge": 28,
+    "target_ref_deleted": "refs/heads/governor/a5ac1b-target",
+    "rulesets_remaining": 0,
+    "main_head": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08"
+  }
+}
