@@ -65,11 +65,48 @@ def canonical_hash(ruleset: dict) -> str:
         json.dumps(ruleset, sort_keys=True).encode()).hexdigest()
 
 
+def policy_hash(ruleset: dict) -> str:
+    """Hash of everything except `enforcement`.
+
+    A5a-c2 found the defect this fixes: the cutover sequence creates the
+    ruleset disabled, hashes the readback, and only then flips it active —
+    but a hash that covers `enforcement` cannot match across that flip by
+    construction. Splitting the hashes lets a state transition stop looking
+    like a policy change, and lets the policy be proven identical on both
+    sides of it.
+    """
+    without_enforcement = {k: v for k, v in ruleset.items() if k != "enforcement"}
+    return hashlib.sha256(
+        json.dumps(without_enforcement, sort_keys=True).encode()).hexdigest()
+
+
+def ruleset_with(enforcement: str) -> dict:
+    return {**canonical_ruleset(), "enforcement": enforcement}
+
+
+def hashes() -> dict:
+    """The three values A5b verifies against."""
+    active = ruleset_with("active")
+    disabled = ruleset_with("disabled")
+    return {
+        "POLICY_HASH": policy_hash(active),
+        "DISABLED_RULESET_HASH": canonical_hash(disabled),
+        "ACTIVE_RULESET_HASH": canonical_hash(active),
+    }
+
+
 def cmd_ruleset(args):
     ruleset = canonical_ruleset()
+    digests = hashes()
     return {
         "canonical_ruleset": ruleset,
         "canonical_hash": canonical_hash(ruleset),
+        "hashes": digests,
+        "verification_sequence": [
+            "create DISABLED -> readback matches DISABLED_RULESET_HASH and POLICY_HASH",
+            "flip ACTIVE     -> readback matches ACTIVE_RULESET_HASH and POLICY_HASH",
+            "POLICY_HASH must be identical on both sides of the flip",
+        ],
         "created": False,
         "note": "generated for review; A5b creates it DISABLED first, hashes "
                 "the readback, then flips enforcement to active",

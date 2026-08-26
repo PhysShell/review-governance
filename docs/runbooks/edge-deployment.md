@@ -48,15 +48,37 @@ conclusion.
 
 ```text
 governor-edge.service      edge_service.py --port 8931
+                           Restart=always
 governor-watchdog.service  edge_watchdog.py watch --repo <owner>/<repo>
                                              --branches main
                                              --stale-after 45 --interval 10
+                                             --window 0
+                           Restart=always
 ```
 
-7. **On the primary**: `heartbeat_client.py --endpoint
-   https://governor-edge.<your-domain> --interval 15`, as a supervised
-   service. A heartbeat that stops is the signal; there is nothing else to
-   configure.
+`--window 0` and `Restart=always` are both load-bearing. A5a-c2 found the
+watchdog deployed with a bounded window and `Restart=on-failure`: it exited
+`0` after its first revocation, systemd correctly did not restart it, and
+the independent failure domain switched itself off the first time it was
+needed — while the service history still read as a successful run. Never
+deploy this unit with `--stop-after-incident`; that flag exists for bounded
+fixtures.
+
+7. **On the primary**, two supervised services:
+
+```text
+heartbeat_client.py --endpoint https://governor-edge.<your-domain>
+                    --interval 15
+signal_client.py    --endpoint https://governor-edge.<your-domain>
+                    --repo <owner>/<repo> --interval 2 --window 0
+```
+
+A heartbeat that stops is the signal; there is nothing else to configure.
+`signal_client` is the healthy-path detector — it pulls delivery *metadata*
+from the edge and re-reads GitHub for every fact. It is an optimisation, not
+a dependency: reconciliation keeps reading GitHub on its own schedule and
+never consults the cursor or the spool, so an edge that goes silent costs
+latency and nothing else.
 
 8. **GitHub App webhook**: set the URL to
    `https://governor-edge.<your-domain>/github/webhook`, set the secret to

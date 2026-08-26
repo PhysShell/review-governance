@@ -22,6 +22,7 @@ import hmac
 import json
 import os
 import sys
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -85,6 +86,20 @@ class EdgeService:
                      "relevant": event in RELEVANT_EVENTS,
                      "note": "signal only; the primary re-reads GitHub"}
 
+    # --- signals ---------------------------------------------------------
+    def handle_signals(self, headers, after):
+        """Authenticated, metadata-only feed. The signature covers the cursor
+        so a request cannot be replayed against a different position."""
+        lower = {k.lower(): v for k, v in headers.items()}
+        if not verify(self.heartbeat_secret, f"signals:{after}".encode(),
+                      lower.get("x-governor-signature")):
+            self.rejected.append({"at": utcnow(), "reason": "bad_signal_sig"})
+            return 401, {"error": "signature verification failed"}
+        signals = self.store.signals_after(after)
+        return 200, {"after": int(after), "count": len(signals),
+                     "signals": signals,
+                     "note": "metadata only; re-read GitHub for the truth"}
+
     # --- heartbeat -------------------------------------------------------
     def handle_heartbeat(self, headers, raw):
         lower = {k.lower(): v for k, v in headers.items()}
@@ -134,7 +149,18 @@ def serve(service, port):
             self._send(status, body)
 
         def do_GET(self):
-            if self.path == "/healthz":
+            if self.path.startswith("/signals"):
+                query = urllib.parse.urlparse(self.path).query
+                after = urllib.parse.parse_qs(query).get("after", ["0"])[0]
+                try:
+                    cursor = int(after)
+                except ValueError:
+                    self._send(400, {"error": "after must be an integer"})
+                    return
+                status, body = service.handle_signals(dict(self.headers.items()),
+                                                      cursor)
+                self._send(status, body)
+            elif self.path == "/healthz":
                 beat = service.store.latest_heartbeat()
                 self._send(200, {"ok": True,
                                  "last_primary_heartbeat":

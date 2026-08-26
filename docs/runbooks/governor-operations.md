@@ -80,13 +80,27 @@ the ability to revoke it (A3b-c3).
 ```text
 primary heartbeat            every <= 15 s
 watchdog declares stale      after <= 45 s of silence
-outage -> successes revoked  <= 60 s target   (A5a observed: 35 s)
+outage -> successes revoked  <= 60 s target
+                             A5a-c2 observed: 52 s, on the external host
+                             (45 s stale window + 10 s poll + one round trip)
 ```
+
+The 52 s is the measured number from the deployed configuration, not a
+target. The earlier 35 s belongs to an in-host prototype and does not apply
+to the external failure domain.
 
 The watchdog runs in a separate runtime and failure domain, uses the
 installation identity, and holds no user credentials. Its capability is
 enforced in code: read state, and patch an existing Governor check run to a
 non-passing conclusion. Nothing else.
+
+**The watchdog must outlive its own incidents.** It is deployed with
+`--window 0` and `Restart=always`, and never with `--stop-after-incident`.
+A5a-c2 found it deployed as a bounded fixture: it exited cleanly after its
+first revocation and stopped watching, with nothing in the service state to
+say so. If you ever see `governor-watchdog.service` inactive with a
+successful exit, that is not a completed job — that is the safety net folded
+up and put away.
 
 **A watchdog trip is not undone by the primary returning.** During the
 outage nobody was watching the providers' mutable carriers, so a fresh
@@ -98,16 +112,28 @@ turning the gate off.
 
 ```text
 webhook ACK                                <= 2 s   (GitHub aborts at 10 s)
-webhook event -> durable observation       P99 <= 10 s
+webhook event -> durable observation       P99 <= 10 s  (A5a-c2: 3.0 s)
 reconciliation interval                    <= 30 s
 observed invalidation -> failure CONFIRMED P99 <= 5 s   (A3b: ~1 s)
 external mutation -> failure CONFIRMED     <= 60 s target
 ```
 
+The healthy path is a pull, not a push: `signal_client` on the primary asks
+the edge `GET /signals?after=<cursor>`, receives delivery **metadata only**,
+and re-reads GitHub for every fact. The edge is never a second source of
+truth, and the primary never accepts an inbound connection.
+
 Reconciliation is part of the safety model, not a convenience: GitHub does
 not automatically redeliver failed webhooks, so anything missed is only
 ever found by reading. A2b demonstrated reconciliation discovering a head
 change with **no** delivery at all.
+
+**Reconciliation must never consult the cursor or the spool.** A5a-c2
+demonstrated the point live: with two deliveries marked `DROPPED` and the
+cursor deliberately left behind, reconciliation still found the drift, and
+the cursor was identical before and after. If reconciliation is ever
+"optimised" into skipping work the fast path has already covered, a delivery
+that never arrived becomes invisible to the one mechanism meant to catch it.
 
 The receiver contract (A2a): receive bytes → verify HMAC → validate event →
 durably record the delivery GUID and payload metadata → **only then** ACK

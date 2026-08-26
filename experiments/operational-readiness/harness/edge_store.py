@@ -81,6 +81,20 @@ class EdgeStore:
             "WHERE delivery_guid=?", (state, guid))
         self.conn.commit()
 
+    def signals_after(self, cursor=0, limit=100):
+        """Metadata-only feed for the primary's fast path.
+
+        Deliberately returns no payload: the signal says *something changed*,
+        and the primary re-reads GitHub to derive the observation itself. The
+        implicit rowid is the cursor, so a primary that falls behind resumes
+        exactly where it stopped.
+        """
+        rows = self.conn.execute(
+            "SELECT rowid AS seq, delivery_guid, event, action, repository,"
+            " received_at, body_hash FROM webhook_deliveries WHERE rowid > ?"
+            " ORDER BY rowid LIMIT ?", (int(cursor), int(limit))).fetchall()
+        return [dict(row) for row in rows]
+
     def deliveries(self, state=None):
         if state:
             return self.conn.execute(

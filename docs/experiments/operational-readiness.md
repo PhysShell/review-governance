@@ -340,3 +340,125 @@ Probe PRs #27 and #28 closed without merge; both isolated refs and the
 probe ruleset deleted (repository ruleset inventory back to 0); check runs
 preserved as commit-bound evidence; `main` still `047ff1a641e3…`,
 unprotected, untouched; the open PRs on `main` remain #8 and #12.
+
+## A5a-c2 — three review defects closed, and one the rerun found
+
+Date: 2026-08-26 (UTC). Preregistered in `PROTOCOL.md` before any fix, so the
+record of what was wrong does not depend on remembering it afterwards.
+
+### c2-1 — the external watchdog SLO, measured after the `--context` fix
+
+Fresh heartbeat loop, fresh probe success `CONFIRMED` on an isolated ref,
+live `systemd` watchdog scoped to the probe branch and the probe context,
+then `SIGKILL` on the primary's heartbeat.
+
+```text
+last primary heartbeat        2026-08-26T02:03:26Z
+primary killed                2026-08-26T02:03:28Z
+watchdog detected (age 49.0s) 2026-08-26T02:04:16Z
+revoked, readback CONFIRMED   2026-08-26T02:04:17Z
+failure seen by an outside    2026-08-26T02:04:18Z
+  observer polling every 2 s
+
+EXTERNAL_WATCHDOG_DETECTION_SLO = 52 s   (heartbeat -> failure observed)
+                                  50 s   (kill -> failure observed)
+```
+
+That is what the configuration produces: `stale-after 45 s` plus a `10 s`
+poll interval plus one API round trip. It is the recorded SLO, not a target
+the seconds were argued into. While the primary was alive the watchdog ran
+and revoked nothing, and when the primary came back neither revoked run was
+restored.
+
+### c2-1a — the rerun found a worse defect than the one it was measuring
+
+`cmd_watch` was written as a bounded fixture — *poll until something is
+revoked, then stop* — and then deployed as the supervisor. After the
+incident the unit exited `0`; `Restart=on-failure` correctly did nothing;
+the journal's last line was `Deactivated successfully`. The independent
+failure domain disabled itself the first time it was needed, and the
+service history looked like a clean run.
+
+```text
+--window 0             run until stopped   <- what the unit now uses
+--stop-after-incident  explicit fixture flag
+Restart=always
+```
+
+Requalified live: with the primary still dead, a second probe success was
+published and revoked by the *same* process — `is-active: active`,
+`MainPID` unchanged, `NRestarts: 0`, incidents 2 and 3 both recorded.
+
+### c2-2 — the fast path from edge to primary
+
+The primary pulls; the edge never pushes and never reaches into the primary.
+A signal says *something changed* and carries no payload, so the primary
+re-reads GitHub for the fact.
+
+```text
+pushed                  2026-08-26T01:59:38Z
+edge received delivery  2026-08-26T01:59:41Z
+primary observed        2026-08-26T01:59:44Z
+
+DELIVERY -> OBSERVATION = 3.0 s          (target < 10 s)
+```
+
+The observation stores the whole open-PR snapshot the primary re-read. An
+earlier draft of `signal_client.py` recorded `pulls[0]` as *the* head for a
+signal that names no PR — a guess wearing the shape of evidence, and exactly
+the kind of thing that reads as a fact six months later. The cursor advances
+only after the observation is durable, and a failed GitHub read stops the
+drain rather than skipping the signal.
+
+Then the independence half. Deliveries 15 and 16 were marked `DROPPED` on
+the edge and the primary's cursor was left at 14, so the fast path was blind
+to the new head by construction:
+
+```text
+primary cursor before reconciliation   14
+stored head    fef17796f4b23a86b9be3b610498b76f30f33a1c
+github head    99157ac6d5042507161edffbcf1a4b2d4d52a857
+drift_detected true
+current_head_is_unreviewed true
+primary cursor after reconciliation    14   (never read, never advanced)
+```
+
+Reconciliation neither imported the cursor nor consulted the spool; a test
+asserts that structurally, because a future refactor that "optimises" it
+into consulting the spool would silently delete this property.
+
+### c2-3 — three hashes instead of one
+
+```text
+POLICY_HASH            d6a4fa262d31c1f9fb95c5be631a52b7884febd65cec36194c5a9e303fedf5a7
+DISABLED_RULESET_HASH  b6ea30b64ae311ce348dcef0be6cf0de69872d74aa18496213fe7eb8e8fa474b
+ACTIVE_RULESET_HASH    fd77f989384bc400967710aa5fa795418946b0b2a9022c9202e9d63a4506e813
+```
+
+`ACTIVE_RULESET_HASH` is unchanged, so nothing reviewed earlier moved.
+`POLICY_HASH` covers the object without `enforcement`, so it is identical on
+both sides of the enable flip — the state transition stops masquerading as a
+policy change — while still changing if the context, `integration_id`,
+`strict` policy, target or `bypass_actors` change. Both properties are
+tested, the second being the one that matters: a hash that ignored too much
+would be worse than the defect it replaced.
+
+### Teardown
+
+Probe PR #29 closed without merge; `probe/a5ac2` and `governor/a5ac2-target`
+deleted; the fixture `systemd` drop-in removed and the watchdog unit back to
+its production scope (`--branches main`, context `ai/final-review`,
+`--window 0`, `Restart=always`) and left `inactive`/`disabled`; the edge
+receiver stays `active`; revoked check runs preserved as commit-bound
+evidence. `ai/final-review` is still unused and `main` still carries no
+ruleset.
+
+### Status after c2
+
+```text
+EXTERNAL_WATCHDOG_DETECTION_SLO_AFTER_FIX  52 s (observed)
+WATCHDOG_SURVIVES_ITS_OWN_INCIDENT         PASS (requalified live)
+WEBHOOK_FAST_PATH                          3.0 s (target < 10 s)
+RECONCILIATION_INDEPENDENT_OF_CURSOR       PASS (live + structural test)
+RULESET_HASH_SPLIT                         PASS
+```

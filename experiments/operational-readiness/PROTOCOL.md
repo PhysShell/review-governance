@@ -437,6 +437,27 @@ ALERTING    two independent signal sources for a single operator: an
             looks at.
 ```
 
+### c2-1a — the deployed watchdog stopped watching after one incident
+
+Found *by* the c2-1 rerun, not preregistered, and recorded here before it was
+fixed. `cmd_watch` was written as a bounded fixture instrument — "poll until
+something is revoked, then stop" — and was then deployed as the supervisor.
+The unit exited `0` after the incident, `Restart=on-failure` correctly did
+nothing, and the watchdog was gone while `systemctl` history still showed a
+successful run.
+
+```text
+OBSERVED   incident at 02:04:16Z -> revoked -> process exits 0
+           governor-watchdog.service: Deactivated successfully.
+EFFECT     first incident disables the independent failure domain
+           silently; the second stale primary is unwatched
+```
+
+Fix: `--window 0` runs until stopped and is what the unit uses;
+`--stop-after-incident` is now an explicit fixture flag; the unit is
+`Restart=always`. Requalification: a second incident handled by the *same*
+process, service still `active`, `NRestarts=0`.
+
 ### Inventory is frozen at cutover, not reused
 
 PR #8 has already moved from `6d81a4d…` to `8aeafa9c…`. The A5a dry run is

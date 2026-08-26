@@ -231,24 +231,42 @@ def cmd_check(args):
 
 
 def cmd_watch(args):
-    """Poll until something is revoked, then stop.
+    """Poll for as long as it is supposed to be watching.
+
+    The A5a-c2-1 rerun found the defect this fixes. This loop used to stop
+    after its first revocation, which is right for a bounded fixture and
+    wrong for the thing it was deployed as: the unit exited 0, systemd's
+    `Restart=on-failure` correctly did nothing, and the watchdog was gone.
+    A supervisor that stops supervising after one incident is worse than
+    none, because the dashboard still says it ran.
+
+    So: `--window 0` means run until stopped, and stopping after an incident
+    is now something a fixture asks for explicitly rather than something the
+    production path inherits by accident.
 
     The window-elapsed result reports the *last observed* state rather than
     a hardcoded one: a run that ends without revoking must still say whether
     the primary looked alive, or the operator learns nothing from it.
     """
-    deadline = time.time() + args.window
+    deadline = None if args.window <= 0 else time.time() + args.window
     last = None
     polls = 0
-    while time.time() < deadline:
+    incidents = []
+    while deadline is None or time.time() < deadline:
         last = cmd_check(args)
         polls += 1
         if last.get("revocations"):
-            last["polls"] = polls
-            return last
+            incidents.append({"incident_id": last.get("incident_id"),
+                              "detected_at": last.get("checked_at"),
+                              "revocations": last["revocations"]})
+            if args.stop_after_incident:
+                last["polls"] = polls
+                return last
+            print(json.dumps({**last, "polls": polls}, default=str), flush=True)
         time.sleep(args.interval)
     return {**(last or {}), "polls": polls, "revocations": [],
-            "note": "window elapsed without revoking; last observed state above"}
+            "incidents_this_run": incidents,
+            "note": "window elapsed; last observed state above"}
 
 
 def main():
@@ -262,7 +280,13 @@ def main():
     ap.add_argument("--db", default=str(CONFIG_DIR / "edge.sqlite3"))
     ap.add_argument("--stale-after", type=int, default=STALE_AFTER_SECONDS)
     ap.add_argument("--interval", type=int, default=10)
-    ap.add_argument("--window", type=int, default=600)
+    ap.add_argument("--window", type=int, default=600,
+                    help="seconds to keep watching; 0 means until stopped, "
+                         "which is what the deployed unit uses")
+    ap.add_argument("--stop-after-incident", action="store_true",
+                    help="exit after the first revocation. For bounded "
+                         "fixtures only — a deployed watchdog that stops "
+                         "after one incident has stopped watching.")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
     result = {"check": cmd_check, "watch": cmd_watch}[args.command](args)
