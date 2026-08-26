@@ -10,7 +10,7 @@ PR #12 is frozen and was not modified.
 ## Result
 
 ```text
-A5b_PREFLIGHT: INCOMPLETE — two rows outstanding
+A5b_PREFLIGHT: PASS
 ```
 
 Credentials, runtime and monitoring are in their production configuration.
@@ -27,7 +27,7 @@ host that would use it, against readbacks rather than assumptions.
 ```text
 K_primary  81e1860652de83dd  primary   6/6 PASS
 K_edge     c7fe54edbae7929e  edge      6/6 PASS, proven from the edge itself
-K0         5f559f7e1f30eb0b  still installed, NOT yet deleted
+K0         5f559f7e1f30eb0b  the shared key being retired
 ```
 
 Each proof covers: private key readable · JWT accepted · `app.id == 4669438`
@@ -57,11 +57,36 @@ A rotation cannot be verified by a constant. `fingerprint()` now refuses to
 hash empty output and fails the whole verdict when it cannot derive a public
 key.
 
-### Outstanding
+### Revocation, proven from both hosts
 
-`K0` is still valid. Its deletion is a UI step, and it must come *after* both
-runtimes are running on their own keys — which they now are. Until then,
-`OLD_SHARED_KEY_REVOKED` cannot be claimed.
+The owner deleted `K0` in the App settings. Afterwards:
+
+```text
+K0         5f559f7e1f30eb0b   REJECTED   HTTP 401
+                              "A JSON web token could not be decoded"
+                              observed from the primary AND from the edge
+K_primary  81e1860652de83dd   PASS 6/6   from the primary
+K_edge     c7fe54edbae7929e   PASS 6/6   from the edge itself
+```
+
+Residual material removed, which turned out to be more than the obvious
+file:
+
+```text
+primary  app.pem                    deleted
+primary  app-credentials.json       `pem` field emptied — it held a second
+                                    copy of K0; client_secret preserved
+primary  K_edge.pem                 deleted — it was the delivery copy, and
+                                    two keys on one host is not a split
+primary  user-token.json            deleted — a live token pair from
+                                    generation 0, read by nothing
+primary  webhook-secret.retired-a2a deleted
+edge     app.pem                    deleted
+```
+
+`K_edge.pem` on the primary is worth naming separately: while both keys sit
+on the same host, the rotation isolates nothing, because one compromise
+yields both halves.
 
 ### What this is, restated
 
@@ -151,22 +176,125 @@ single root cause: two messages, one incident. Suppressing the first would
 lose visibility of the watchdog for the entire duration of a receiver
 outage, which is worse. Recorded for the owner to rule on.
 
-### An honest gap
+## 3 — User authorization: the wire, and the transition it feeds
+
+The gap here was not a missing dashboard tile. By A1c semantics `AUTH_LOST`
+and `REFRESH_OUTCOME_UNKNOWN` forbid provider triggers, invalidate standing
+successes and demand fresh qualification — so a state nobody produces is a
+safety transition nobody can enter. The owner ruled it blocking, correctly.
+
+### Two readers, deliberately different objects
 
 ```text
-user_authorization: NOT_REPORTED
+Governor lifecycle -> authoritative store (auth.sqlite3) -> transition
+sentinel           -> auth-state.json projection         -> alerts a human
 ```
 
-`auth_lost` and `refresh_outcome_unknown` are **forwarded**, not detected.
-The sentinel never probes a refresh token, because Device Flow refresh
-tokens are single-use with rotation and probing one is a write that can
-strand the credential. Nothing currently writes `auth-state.json` — the A1c
-lifecycle code lives on its own branch — so those two CRITICAL causes are
-wired to a silent producer. The sentinel renders this as `NOT_REPORTED`
-rather than `HEALTHY`, because an unreported subsystem that shows green is
-how a dashboard starts lying.
+The projection is written one way and never read back. A test tampers with
+the mirror and asserts the authority is unmoved, because a world-readable
+file deciding whether the gate opens is not a design, it is an accident
+waiting to be discovered.
 
-## 3 — Production processes, running
+`PERMITS_TRIGGERS` is an allowlist of exactly `{AUTHORIZED}`, so a state
+nobody anticipated fails closed instead of falling through a negative check.
+No observation at all is not permission: a Governor that never established
+authorization has not established it.
+
+### The controlled refresh
+
+The stored access token had expired four days earlier — the normal
+eight-hour condition, which the producer refuses to call a revocation. That
+left the production composition unable to publish any success at all, which
+is correct fail-closed behaviour and also meant a live `AUTHORIZED` had
+never been observed. The owner authorised **exactly one** refresh attempt,
+with no retry under any outcome.
+
+```text
+G3  091a70cf2f39eab6 access / cd6894a851456335 refresh
+    -> one request, HTTP 200
+    -> structurally valid: access_token, refresh_token, expires_in,
+       refresh_token_expires_in all present
+    -> G4 persisted atomically, fsync on file and directory
+    -> independent readback: generation_matches, access_token_matches
+    -> real authenticated call succeeded as PhysShell
+    -> producer emitted AUTHORIZED
+    -> sentinel observed AUTHORIZED, generation 4
+```
+
+One deviation from the literal order, stated rather than slipped in: the
+contract validates before persisting, which would discard a live refresh
+token whenever an expiry field is missing. The implementation persists the
+moment both secrets exist and only then judges, marking the credential
+`validated: false` if the response was structurally incomplete. `AUTHORIZED`
+still requires full validity, the gate still closes through the auth store
+rather than through the credential file, and a recoverable credential is not
+destroyed to satisfy an ordering.
+
+There is no retry anywhere in that function, deliberately. If the connection
+dies at the worst millisecond, a second request either fails against a spent
+token or succeeds and discards a rotation nobody recorded. That uncertainty
+is what `REFRESH_OUTCOME_UNKNOWN` is for; it is not a thing to be retried
+away.
+
+### Superseded generations keep no secrets
+
+```text
+history entry: generation, label, obtained_at, obtained_via,
+               access_token_fingerprint, refresh_token_fingerprint,
+               superseded_at, secrets_removed
+```
+
+No token-shaped string survives in the history — asserted by regex, in a
+test and again live. A retained refresh token buys an audit nothing and
+gives an attacker one more candidate to try.
+
+### The integration fixture
+
+Isolated ref, probe context, `ai/final-review` untouched throughout.
+
+```text
+1  publish success under the production composition
+       auth_state AUTHORIZED, generation 4
+       check run 98188457434, observed success, CONFIRMED
+
+2  inject REFRESH_OUTCOME_UNKNOWN into the durable store (source: fixture,
+   so the audit trail says injected, not observed)
+       permits_triggers        false
+       demands_invalidation    true
+
+3  trigger path refuses
+       "provider triggers forbidden while user authorization is
+        REFRESH_OUTCOME_UNKNOWN"
+
+4  governor.publish success refuses, with the same exception
+
+5  safety transition
+       standing success found: 98188457434
+       revoked, observed failure, projection CONFIRMED
+       restores_automatically: false
+
+6  independent GitHub readback
+       conclusion failure
+       "Governor: EVIDENCE_INVALIDATED (authorization)"
+
+7  Telegram alert delivered
+       13:06:30Z CRITICAL refresh_outcome_unknown
+
+8  return to AUTHORIZED
+       invalidations: []
+       the revoked check run on GitHub: still failure
+       13:07:10Z RECOVERY refresh_outcome_unknown delivered
+
+9  the authoritative store was then re-observed for real, so production
+   state is not left resting on a fixture:
+       AUTHORIZED, source device_flow, generation 4
+```
+
+Step 9 matters more than it looks. Leaving the production auth store holding
+a fixture-injected `AUTHORIZED` would have been exactly the class of quiet
+fiction this programme keeps finding.
+
+## 4 — Production processes, running
 
 ```text
 edge     governor-edge.service       active/enabled  Restart=always
@@ -223,13 +351,13 @@ with one installation, silently wrong with two.
 ```text
 PRIMARY_APP_KEY_SEPARATE             PASS
 EDGE_APP_KEY_SEPARATE                PASS
-OLD_SHARED_KEY_REVOKED               NOT_YET — K0 deletion is a UI step
+OLD_SHARED_KEY_REVOKED               PASS
 PRIMARY_AUTH_AFTER_ROTATION          PASS
 EDGE_AUTH_AFTER_ROTATION             PASS
 
-OFFHOST_HEALTH_MONITOR               PASS (detection + recovery observed;
-                                     email delivery awaiting human
-                                     confirmation)
+OFFHOST_HEALTH_MONITOR               PASS
+DOWN_DELIVERY_TO_HUMAN               PASS (confirmed by the recipient)
+UP_DELIVERY_TO_HUMAN                 PASS (confirmed by the recipient)
 INCIDENT_ALERT_END_TO_END            PASS
 RECOVERY_ALERT_END_TO_END            PASS
 
@@ -239,14 +367,28 @@ HEARTBEAT_HEALTHY                    PASS
 FAST_PATH_HEALTHY                    PASS
 RECONCILIATION_HEALTHY               PASS
 
-USER_AUTHORIZATION_REPORTING         NOT_REPORTED — no producer exists
+CURRENT_REAL_AUTHORIZATION           PASS
+USER_AUTHORIZATION_REPORTING         PASS
+AUTH_FAILURE_REACHES_GATE            PASS
+AUTH_FAILURE_ALERT_DELIVERED         PASS
+AUTH_RECOVERY_DOES_NOT_RESTORE       PASS
 
 PRODUCTION_CONTEXT_STILL_UNUSED      PASS
 MAIN_RULESET_STILL_ABSENT            PASS
 ```
 
-`A5b_PREFLIGHT` cannot be declared `PASS` while `OLD_SHARED_KEY_REVOKED` is
-outstanding.
+Accepted for v1 by the owner and recorded rather than silently applied:
+
+```text
+duplicate-alert policy   ACCEPTED — two observable consequences of one
+                         cause; correlation belongs on a presentation
+                         layer, not in detection semantics
+startup grace            ACCEPTED
+```
+
+The HetrixTools API token used to diagnose the recipient typo was revoked by
+the owner. Deleting the local file was not the revocation and is not
+recorded as one.
 
 ## Stop
 

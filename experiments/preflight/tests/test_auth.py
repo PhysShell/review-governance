@@ -385,14 +385,19 @@ def test_sentinel_forwards_both_bad_states(tmp_path):
         n.close()
 
 
-# --- refresh classification ---------------------------------------------------
+# --- refresh: exactly one attempt, strict classification ---------------------
 
-def _prep(tmp_path, monkeypatch, response=None, raises=None):
+FULL = {"access_token": "ghu_new", "refresh_token": "ghr_new",
+        "expires_in": 28800, "refresh_token_expires_in": 15897600}
+
+
+def _prep(tmp_path, monkeypatch, response=None, raises=None, counter=None):
     creds = tmp_path / "user-credentials.json"
     creds.write_text(json.dumps({
         "current": {"access_token": "ghu_old", "refresh_token": "ghr_old",
-                    "generation": 3},
-        "history": []}))
+                    "generation": 3, "label": "G3"},
+        "history": [{"access_token": "ghu_ancient",
+                     "refresh_token": "ghr_ancient", "generation": 2}]}))
     monkeypatch.setattr(auth_producer, "CREDENTIALS", creds)
     monkeypatch.setattr(auth_producer, "CONFIG_DIR", tmp_path)
     (tmp_path / "app-credentials.json").write_text(json.dumps(
@@ -406,31 +411,78 @@ def _prep(tmp_path, monkeypatch, response=None, raises=None):
         def read(self): return json.dumps(response).encode()
 
     def fake_urlopen(req, timeout=None):
+        if counter is not None:
+            counter.append(1)
         if raises:
             raise raises
         return Resp()
 
     monkeypatch.setattr(auth_producer.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(auth_producer, "probe_access_token",
+                        lambda t: (200, {"login": "PhysShell"}))
     return creds
 
 
-def test_refresh_success_rotates_and_records_authorized(store, tmp_path,
-                                                        monkeypatch):
-    creds = _prep(tmp_path, monkeypatch,
-                  response={"access_token": "ghu_new", "refresh_token": "ghr_new"})
+def test_refresh_makes_exactly_one_request(store, tmp_path, monkeypatch):
+    """If TCP dies at the worst millisecond, a second request either fails
+    against a spent token or succeeds and discards a rotation nobody
+    recorded. That uncertainty is not a thing to retry away."""
+    calls = []
+    _prep(tmp_path, monkeypatch, raises=TimeoutError("boom"), counter=calls)
+    result = auth_producer.cmd_refresh(object(), store)
+    assert len(calls) == 1
+    assert result["state"] == auth_state.REFRESH_OUTCOME_UNKNOWN
+    assert result["retry_performed"] is False
+    assert result["recovery"] == "fresh Device Flow only"
+
+
+def test_refresh_success_requires_readback_and_a_real_call(store, tmp_path,
+                                                           monkeypatch):
+    creds = _prep(tmp_path, monkeypatch, response=FULL)
     result = auth_producer.cmd_refresh(object(), store)
     assert result["state"] == auth_state.AUTHORIZED
+    assert result["old_auth_generation"] == 3
+    assert result["new_auth_generation"] == 4
+    assert result["readback"]["generation_matches"] is True
+    assert result["readback"]["access_token_matches"] is True
+    assert result["authenticated_as"] == "PhysShell"
+    assert json.loads(creds.read_text())["current"]["validated"] is True
+
+
+def test_history_keeps_no_secrets_after_rotation(store, tmp_path, monkeypatch):
+    """Filesystems support archaeology. A superseded refresh token is a
+    candidate an attacker can try, and it buys an audit nothing."""
+    creds = _prep(tmp_path, monkeypatch, response=FULL)
+    auth_producer.cmd_refresh(object(), store)
     blob = json.loads(creds.read_text())
-    assert blob["current"]["generation"] == 4
-    assert blob["current"]["access_token"] == "ghu_new"
-    assert blob["history"][-1]["access_token"] == "ghu_old", \
-        "the spent credential must stay in history"
-    assert store.permits_triggers() is True
+    flat = json.dumps(blob["history"])
+    assert "ghr_old" not in flat and "ghu_old" not in flat
+    assert "ghr_ancient" not in flat and "ghu_ancient" not in flat
+    assert all(h["secrets_removed"] for h in blob["history"])
+    assert all("refresh_token_fingerprint" in h for h in blob["history"])
+    # exactly one live credential on disk
+    assert blob["current"]["refresh_token"] == "ghr_new"
+    assert list(blob) == ["current", "history"]
 
 
-def test_refresh_definitive_error_is_auth_lost(store, tmp_path, monkeypatch):
-    """A1c: GitHub reports this failure as HTTP 200 with an error field, so
-    a 2xx is not success."""
+def test_incomplete_response_is_ambiguous_but_keeps_the_material(store, tmp_path,
+                                                                 monkeypatch):
+    """AUTHORIZED needs full structural validity; discarding a live refresh
+    token because an expiry field is missing would guarantee a Device Flow
+    for no safety gain."""
+    partial = {"access_token": "ghu_new", "refresh_token": "ghr_new"}
+    creds = _prep(tmp_path, monkeypatch, response=partial)
+    result = auth_producer.cmd_refresh(object(), store)
+    assert result["state"] == auth_state.REFRESH_OUTCOME_UNKNOWN
+    assert result["credential_persisted"] is True
+    stored = json.loads(creds.read_text())["current"]
+    assert stored["refresh_token"] == "ghr_new"
+    assert stored["validated"] is False
+    assert store.permits_triggers() is False, "the gate closes via the store"
+
+
+def test_definitive_error_is_auth_lost(store, tmp_path, monkeypatch):
+    """A1c: this failure arrives as HTTP 200 with an error field."""
     _prep(tmp_path, monkeypatch, response={"error": "incorrect_client_credentials"})
     result = auth_producer.cmd_refresh(object(), store)
     assert result["state"] == auth_state.AUTH_LOST
@@ -438,25 +490,45 @@ def test_refresh_definitive_error_is_auth_lost(store, tmp_path, monkeypatch):
 
 
 def test_unrecognised_error_is_ambiguous_not_lost(store, tmp_path, monkeypatch):
-    """Not on the definitive list means we do not know, and pretending to
-    know is how a dead authorization gets called live."""
     _prep(tmp_path, monkeypatch, response={"error": "something_new_in_2027"})
     result = auth_producer.cmd_refresh(object(), store)
     assert result["state"] == auth_state.REFRESH_OUTCOME_UNKNOWN
 
 
-def test_transport_failure_is_ambiguous(store, tmp_path, monkeypatch):
-    """The request left the host; whether GitHub consumed the token is
-    unknowable from here."""
-    _prep(tmp_path, monkeypatch, raises=TimeoutError("read timed out"))
+def test_new_token_that_fails_a_real_call_is_ambiguous(store, tmp_path,
+                                                       monkeypatch):
+    """A credential we cannot prove works is not an authorization."""
+    _prep(tmp_path, monkeypatch, response=FULL)
+    monkeypatch.setattr(auth_producer, "probe_access_token",
+                        lambda t: (401, None))
     result = auth_producer.cmd_refresh(object(), store)
     assert result["state"] == auth_state.REFRESH_OUTCOME_UNKNOWN
-    assert result["reason"] == "TimeoutError"
+    assert result["credential_persisted"] is True
+
+
+def test_preflight_failure_does_not_spend_the_token(store, tmp_path, monkeypatch):
+    calls = []
+    _prep(tmp_path, monkeypatch, response=FULL, counter=calls)
+    (tmp_path / "app-credentials.json").write_text(json.dumps({"client_id": ""}))
+    result = auth_producer.cmd_refresh(object(), store)
+    assert result["attempted"] is False
+    assert calls == []
+    assert store.history() == []
+
+
+def test_refresh_is_reachable_only_by_explicit_command():
+    """Spending a single-use token must be something an operator asked for,
+    never something a poll loop decided."""
+    source = (BASE / "harness" / "auth_producer.py").read_text()
+    assert source.count("oauth/access_token") == 1
+    callers = [line.strip() for line in source.splitlines()
+               if "cmd_refresh" in line and "def cmd_refresh" not in line]
+    assert len(callers) == 1, callers
+    assert '"refresh": cmd_refresh' in callers[0]
 
 
 def test_probe_never_escalates_to_refresh():
-    """An operator has to ask; a poll loop must not spend the token."""
     source = (BASE / "harness" / "auth_producer.py").read_text()
-    probe_body = source.split("def cmd_probe(")[1].split("def ")[0]
+    probe_body = source.split("def cmd_probe(")[1].split("\ndef ")[0]
     assert "cmd_refresh" not in probe_body
     assert "oauth/access_token" not in probe_body
