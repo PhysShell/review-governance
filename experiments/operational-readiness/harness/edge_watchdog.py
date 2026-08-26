@@ -265,6 +265,7 @@ def cmd_check(args, notifier=None):
                   "heartbeat_age_seconds": None if age is None else round(age, 1),
                   "stale_after_seconds": args.stale_after,
                   "primary_stale": stale, "revocations": []}
+        store.record_watchdog_poll(result["checked_at"])
         alert_on_heartbeat(notifier, args, result, age)
         alert_on_stuck_deliveries(notifier, args, store, result["checked_at"])
         if not stale:

@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS primary_heartbeat (
     last_seen_epoch     REAL NOT NULL,
     payload             TEXT
 );
+CREATE TABLE IF NOT EXISTS watchdog_liveness (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    last_poll_at TEXT NOT NULL,
+    polls        INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS watchdog_incidents (
     incident_id         INTEGER PRIMARY KEY AUTOINCREMENT,
     detected_at         TEXT NOT NULL,
@@ -138,6 +143,26 @@ class EdgeStore:
         return self.conn.execute(
             "SELECT * FROM primary_heartbeat ORDER BY last_seen_epoch DESC "
             "LIMIT 1").fetchone()
+
+    # --- watchdog liveness ------------------------------------------------
+    def record_watchdog_poll(self, at):
+        """Proof the loop turned, as opposed to proof the process exists.
+
+        `systemctl is-active` is true for a hung loop, so it cannot be the
+        evidence that the watchdog is watching. This can, and it makes the
+        poll count observable instead of inferred from elapsed time.
+        """
+        self.conn.execute(
+            "INSERT INTO watchdog_liveness (id, last_poll_at, polls)"
+            " VALUES (1,?,1) ON CONFLICT(id) DO UPDATE SET"
+            " last_poll_at=excluded.last_poll_at, polls=polls+1", (at,))
+        self.conn.commit()
+
+    def watchdog_liveness(self):
+        row = self.conn.execute(
+            "SELECT last_poll_at, polls FROM watchdog_liveness WHERE id=1"
+        ).fetchone()
+        return dict(row) if row else None
 
     # --- incidents --------------------------------------------------------
     def open_incident(self, *, detected_at, stale_age, primary_instance_id,

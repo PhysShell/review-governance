@@ -188,9 +188,14 @@ def serve(service, port):
                 self._send(status, body)
             elif self.path == "/healthz":
                 beat = service.store.latest_heartbeat()
+                watchdog = service.store.watchdog_liveness()
                 self._send(200, {"ok": True,
                                  "last_primary_heartbeat":
-                                     beat["last_seen_at"] if beat else None})
+                                     beat["last_seen_at"] if beat else None,
+                                 "last_watchdog_poll":
+                                     watchdog["last_poll_at"] if watchdog else None,
+                                 "watchdog_polls":
+                                     watchdog["polls"] if watchdog else 0})
             else:
                 self._send(404, {"error": "not found"})
 

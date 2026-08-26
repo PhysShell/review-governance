@@ -33,6 +33,7 @@ import governor
 CONFIG_DIR = Path(os.environ.get(
     "GOVERNOR_CONFIG_DIR", os.path.expanduser("~/.config/review-governor")))
 RECONCILIATION_MAX_AGE = 60
+WATCHDOG_MAX_AGE = 60
 FORWARDED_AUTH_STATES = {"AUTH_LOST": "auth_lost",
                          "REFRESH_OUTCOME_UNKNOWN": "refresh_outcome_unknown"}
 
@@ -114,6 +115,36 @@ def check_auth_state(args, notifier):
     return result
 
 
+def check_watchdog(args, notifier, healthz):
+    """Is the watchdog *turning*, not merely running.
+
+    Nothing else covers this. The off-host uptime monitor watches the
+    receiver, `Restart=always` covers a crash but not a hang, and
+    `systemctl is-active` is true for a loop that stopped looping. So the
+    independent failure domain could have gone quiet with every dashboard
+    green — which is the exact failure this whole program exists to refuse.
+    """
+    last = (healthz or {}).get("last_watchdog_poll")
+    age = age_of(last)
+    if last is None:
+        state = {"state": "NOT_REPORTED", "last_poll_at": None}
+    else:
+        state = {"state": "POLLING" if age is not None and age <= args.watchdog_max_age
+                          else "NOT_POLLING",
+                 "last_poll_at": last,
+                 "age_seconds": None if age is None else round(age, 1),
+                 "polls": (healthz or {}).get("watchdog_polls")}
+    if notifier:
+        if state["state"] == "POLLING":
+            notifier.clear("watchdog_not_polling", repo=args.repo,
+                           detected_at=utcnow())
+        else:
+            notifier.raise_(alerting.CRITICAL, "watchdog_not_polling",
+                            repo=args.repo, detected_at=utcnow(),
+                            state=f"{state['state']} age={state.get('age_seconds')}")
+    return state
+
+
 def check_edge_receiver(args, notifier):
     """The primary's own view of the edge. The off-host uptime monitor is
     the independent one; this exists so the two disagree loudly rather than
@@ -129,20 +160,23 @@ def check_edge_receiver(args, notifier):
             notifier.clear("webhook_receiver_unavailable", repo=args.repo,
                            detected_at=utcnow())
     except Exception as exc:
+        body = None
         state = {"state": "UNREACHABLE", "error": type(exc).__name__}
         if notifier:
             notifier.raise_(alerting.WARNING, "webhook_receiver_unavailable",
                             repo=args.repo, detected_at=utcnow(),
                             state=type(exc).__name__)
-    return state
+    return state, body
 
 
 def sweep(args, notifier):
+    receiver, healthz = check_edge_receiver(args, notifier)
     return {"checked_at": utcnow(),
             "reconciliation": check_reconciliation(args, notifier),
             "installation_token": check_installation_token(args, notifier),
             "user_authorization": check_auth_state(args, notifier),
-            "edge_receiver": check_edge_receiver(args, notifier)}
+            "edge_receiver": receiver,
+            "edge_watchdog": check_watchdog(args, notifier, healthz)}
 
 
 def build_notifier(args):
@@ -170,6 +204,9 @@ def main():
     ap.add_argument("--alerts-db", default=str(CONFIG_DIR / "alerts.sqlite3"))
     ap.add_argument("--reconciliation-max-age", type=int,
                     default=RECONCILIATION_MAX_AGE)
+    ap.add_argument("--watchdog-max-age", type=int, default=WATCHDOG_MAX_AGE,
+                    help="how stale the edge watchdog's last poll may be "
+                         "before it is presumed to have stopped watching")
     ap.add_argument("--interval", type=int, default=20)
     ap.add_argument("--window", type=int, default=0,
                     help="0 means until stopped")

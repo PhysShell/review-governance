@@ -53,6 +53,7 @@ CAUSES = (
     "auth_lost",
     "refresh_outcome_unknown",
     "reconciliation_stale",
+    "watchdog_not_polling",
     "webhook_receiver_unavailable",
     "delivery_stuck",
 )

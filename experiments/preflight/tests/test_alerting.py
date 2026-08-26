@@ -382,3 +382,49 @@ def test_ack_failure_does_not_disturb_the_primary_cursor(tmp_path, monkeypatch):
     assert result["cursor"] == 7
     assert store.cursor() == 7
     store.close()
+
+
+# --- watchdog liveness: turning, not merely running --------------------------
+
+def test_watchdog_poll_is_recorded_and_counted(tmp_path):
+    import edge_store
+    store = edge_store.EdgeStore(tmp_path / "e.sqlite3")
+    assert store.watchdog_liveness() is None
+    store.record_watchdog_poll("2026-08-26T10:00:00Z")
+    store.record_watchdog_poll("2026-08-26T10:00:10Z")
+    live = store.watchdog_liveness()
+    assert live == {"last_poll_at": "2026-08-26T10:00:10Z", "polls": 2}
+    store.close()
+
+
+def test_sentinel_pages_when_the_watchdog_stops_turning(notifier):
+    """`Restart=always` covers a crash but not a hang, and is-active is true
+    for a loop that stopped looping. Nothing else covers this."""
+    import sentinel
+
+    class Args:
+        repo = REPO
+        watchdog_max_age = 60
+
+    stale = {"last_watchdog_poll": "2020-01-01T00:00:00Z", "watchdog_polls": 7}
+    state = sentinel.check_watchdog(Args(), notifier, stale)
+    assert state["state"] == "NOT_POLLING"
+    assert notifier.open_causes() == ["watchdog_not_polling"]
+
+    fresh = {"last_watchdog_poll": alerting.utcnow(), "watchdog_polls": 8}
+    state = sentinel.check_watchdog(Args(), notifier, fresh)
+    assert state["state"] == "POLLING"
+    assert notifier.open_causes() == []
+
+
+def test_unreachable_edge_does_not_silently_pass_the_watchdog_check(notifier):
+    """An unreachable receiver must not read as 'watchdog fine'."""
+    import sentinel
+
+    class Args:
+        repo = REPO
+        watchdog_max_age = 60
+
+    state = sentinel.check_watchdog(Args(), notifier, None)
+    assert state["state"] == "NOT_REPORTED"
+    assert notifier.open_causes() == ["watchdog_not_polling"]

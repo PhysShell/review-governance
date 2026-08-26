@@ -97,6 +97,35 @@ They start Python through `nix develop`, not a pinned `/nix/store` path: a
 pinned interpreter is one garbage collection away from a service that will
 not start.
 
+## Alert causes, and who raises them
+
+```text
+edge watchdog   heartbeat_age_critical / _warning
+                watchdog_incident
+                watchdog_revocation_outcome_unknown / _failed
+                installation_token_mint_failed
+                delivery_stuck
+primary sentinel  reconciliation_stale
+                  watchdog_not_polling
+                  installation_token_mint_failed
+                  auth_lost / refresh_outcome_unknown  (forwarded only)
+primary fast path webhook_receiver_unavailable
+```
+
+Two of these have caveats worth knowing before you trust a green screen.
+
+`auth_lost` and `refresh_outcome_unknown` are **forwarded**, not detected.
+The sentinel never probes a refresh token, because Device Flow refresh
+tokens are single-use with rotation and probing one can strand the
+credential. Until a refresh path writes `auth-state.json`, the sentinel
+reports `NOT_REPORTED` — which is not the same as healthy, and is rendered
+differently on purpose.
+
+`delivery_stuck` can only clear because the primary acknowledges progress
+through `POST /signals/ack`. That acknowledgement is advisory: the primary's
+own cursor remains the authority, reconciliation ignores both, and `DROPPED`
+rows are never touched.
+
 ## Order of operations for the key rotation
 
 ```text
