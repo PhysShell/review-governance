@@ -1,0 +1,22 @@
+[Unit]
+Description=Governor edge watchdog (failure-only Check Run revocation)
+After=network-online.target governor-edge.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=governor-edge
+Group=governor-edge
+WorkingDirectory=/opt/governor-edge
+Environment=GOVERNOR_EDGE_CONFIG=/var/lib/governor-edge/.config/review-governor-edge
+ExecStart=/usr/bin/python3 /opt/governor-edge/edge_watchdog.py watch --repo PhysShell/evm-from-scratch --branches main --stale-after 45 --interval 10 --window 0
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/governor-edge/.config/review-governor-edge
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

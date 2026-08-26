@@ -212,12 +212,19 @@ def test_edge_schema_has_no_place_to_store_a_success(tmp_path):
     tables = [row[0] for row in store.conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' "
         "AND name NOT LIKE 'sqlite_%'").fetchall()]
+    # A5b-preflight added watchdog_liveness: a poll counter and timestamp,
+    # so "the watchdog is turning" is observable rather than inferred from
+    # `systemctl is-active`, which is true for a hung loop. Listed
+    # explicitly, because the point of this test is that the table set does
+    # not grow without someone deciding it should.
     assert set(tables) == {"webhook_deliveries", "primary_heartbeat",
-                          "watchdog_incidents"}
+                           "watchdog_liveness", "watchdog_incidents"}
     schema = " ".join(row[0] or "" for row in store.conn.execute(
         "SELECT sql FROM sqlite_master").fetchall())
     assert "verdict" not in schema.lower()
     assert "bundle" not in schema.lower()
+    assert "conclusion" not in schema.lower()
+    assert "success" not in schema.lower()
     store.close()
 
 

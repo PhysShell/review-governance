@@ -120,6 +120,7 @@ def test_observation_stores_the_whole_snapshot_not_a_guess(tmp_path, monkeypatch
     monkeypatch.setattr(signal_client, "open_pr_snapshot",
                         lambda repo, token=None: [{"number": 1, "head": "aaa"},
                                                   {"number": 2, "head": "bbb"}])
+    monkeypatch.setattr(signal_client, "ack", lambda ep, sec, through: 202)
     result = signal_client.drain("http://edge", HEARTBEAT_SECRET, store, REPO)
     assert result["processed"][0]["pr_count"] == 2
     stored = store.observations()[0]
@@ -189,7 +190,7 @@ def test_watch_keeps_going_after_an_incident(monkeypatch):
     import edge_watchdog
     calls = {"n": 0}
 
-    def fake_check(args):
+    def fake_check(args, notifier=None):
         calls["n"] += 1
         if calls["n"] == 1:
             return {"revocations": [{"check_run_id": 1, "state": "CONFIRMED"}],
@@ -206,6 +207,7 @@ def test_watch_keeps_going_after_an_incident(monkeypatch):
         window = 0                 # what the unit runs with
         interval = 0
         stop_after_incident = False
+        no_alerts = True           # a fixture must never page a human
 
     with pytest.raises(LoopEscape):
         edge_watchdog.cmd_watch(Args())
@@ -217,13 +219,15 @@ def test_window_elapsed_reports_the_last_observed_state(monkeypatch):
     ticks = iter([0, 1, 2, 3, 4, 5, 6, 7, 8])
     monkeypatch.setattr(edge_watchdog.time, "time", lambda: next(ticks))
     monkeypatch.setattr(edge_watchdog.time, "sleep", lambda s: None)
-    monkeypatch.setattr(edge_watchdog, "cmd_check", lambda args: {
+    monkeypatch.setattr(edge_watchdog, "cmd_check",
+                        lambda args, notifier=None: {
         "revocations": [], "primary_stale": True, "checked_at": "t"})
 
     class Args:
         window = 3
         interval = 0
         stop_after_incident = False
+        no_alerts = True
 
     result = edge_watchdog.cmd_watch(Args())
     assert result["primary_stale"] is True, "last observed state must survive"
@@ -233,7 +237,8 @@ def test_window_elapsed_reports_the_last_observed_state(monkeypatch):
 
 def test_stop_after_incident_is_still_available_for_fixtures(monkeypatch):
     import edge_watchdog
-    monkeypatch.setattr(edge_watchdog, "cmd_check", lambda args: {
+    monkeypatch.setattr(edge_watchdog, "cmd_check",
+                        lambda args, notifier=None: {
         "revocations": [{"check_run_id": 1}], "incident_id": 9})
     monkeypatch.setattr(edge_watchdog.time, "sleep", lambda s: None)
 
@@ -241,6 +246,7 @@ def test_stop_after_incident_is_still_available_for_fixtures(monkeypatch):
         window = 600
         interval = 0
         stop_after_incident = True
+        no_alerts = True
 
     result = edge_watchdog.cmd_watch(Args())
     assert result["polls"] == 1

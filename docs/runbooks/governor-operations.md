@@ -94,6 +94,20 @@ installation identity, and holds no user credentials. Its capability is
 enforced in code: read state, and patch an existing Governor check run to a
 non-passing conclusion. Nothing else.
 
+**A running watchdog is not a watching watchdog.** `systemctl is-active` is
+true for a loop that stopped looping, and `Restart=always` covers a crash
+but not a hang. So the watchdog stamps every poll into the edge database and
+`/healthz` exposes it:
+
+```text
+GET /healthz -> {"last_watchdog_poll": "...", "watchdog_polls": N}
+```
+
+The primary sentinel raises `watchdog_not_polling` (CRITICAL) when that
+timestamp is older than 60 s, and treats an unreachable edge as
+`NOT_REPORTED` rather than as fine. Nothing else covers this: the off-host
+uptime monitor watches the *receiver*, not the watchdog.
+
 **The watchdog must outlive its own incidents.** It is deployed with
 `--window 0` and `Restart=always`, and never with `--stop-after-incident`.
 A5a-c2 found it deployed as a bounded fixture: it exited cleanly after its
