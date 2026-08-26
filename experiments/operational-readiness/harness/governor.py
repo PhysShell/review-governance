@@ -28,6 +28,7 @@ import urllib.request
 import time
 from pathlib import Path
 
+import auth_state
 import decisions as dec
 
 API = "https://api.github.com"
@@ -143,6 +144,30 @@ def output_for(evidence, verdict):
     return {"title": f"Governor: {verdict}", "summary": summary}
 
 
+def authorization_row(auth_db, conclusion):
+    """A passing conclusion requires live user authorization; revoking never
+    does.
+
+    The asymmetry is the safety model in one function. Publishing a success
+    asserts that somebody was in a position to watch the providers' mutable
+    evidence, and that is exactly what a lost authorization removes. Refusing
+    to *revoke* while unauthorized, on the other hand, would strand green
+    checks precisely when nobody is watching them.
+
+    Read from the authoritative store, never from `auth-state.json`: the
+    mirror is for alerting a human, and a file anything on the host can edit
+    must not decide whether the gate opens.
+    """
+    store = auth_state.AuthStore(auth_db)
+    try:
+        row = store.current()
+        if conclusion in ("success", "neutral", "skipped"):
+            auth_state.require_triggers_permitted(store)
+        return dict(row) if row else None
+    finally:
+        store.close()
+
+
 def publish(args):
     """Full lifecycle: durable decision -> PENDING -> PATCH -> exact GET ->
     CONFIRMED."""
@@ -150,6 +175,7 @@ def publish(args):
         raise SystemExit(f"{args.conclusion} can read as passing downstream")
     if args.conclusion not in ALLOWED_CONCLUSIONS:
         raise SystemExit(f"conclusion {args.conclusion} not permitted")
+    auth_row = authorization_row(args.auth_db, args.conclusion)
     token = installation_token()
     history = dec.History(args.db)
     try:
@@ -162,7 +188,8 @@ def publish(args):
         decision_id = history.record(
             epoch_id=epoch_id, head_sha=args.head, verdict=verdict,
             bundle_hash=evidence["fixture_hash"], bundle_schema=EVIDENCE_SCHEMA,
-            decision_rule_revision="a5a.1", auth_generation=3,
+            decision_rule_revision="a5a.1",
+            auth_generation=(auth_row or {}).get("auth_generation", 0),
             decided_at=utcnow(), cause=args.cause)
 
         run_id = args.check_run_id
@@ -190,6 +217,8 @@ def publish(args):
                                   observed_conclusion=observed, at=utcnow())
         app = (readback or {}).get("app") or {}
         return {"decision_id": decision_id, "check_run_id": run_id,
+                "auth_state": (auth_row or {}).get("state", "NEVER_OBSERVED"),
+                "auth_generation": (auth_row or {}).get("auth_generation"),
                 "verdict": verdict, "intended": args.conclusion,
                 "observed": observed, "projection_state": settled,
                 "head_sha": (readback or {}).get("head_sha"),
@@ -232,6 +261,7 @@ def main():
     ap.add_argument("--cause", default=None)
     ap.add_argument("--check-run-id", type=int, default=None)
     ap.add_argument("--db", default=".captures/a5a/decisions.sqlite3")
+    ap.add_argument("--auth-db", default=str(CONFIG_DIR / "auth.sqlite3"))
     ap.add_argument("--out", default=None)
     ap.add_argument("--heartbeat-file",
                     default=os.path.expanduser("~/.config/review-governor/heartbeat.json"))

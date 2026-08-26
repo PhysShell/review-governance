@@ -127,14 +127,18 @@ def check_auth_state(args, notifier):
                         "not evidence that user authorization is healthy"}
     reported = json.loads(path.read_text() or "{}")
     state = reported.get("state")
-    result = {"state": state, "generation": reported.get("generation"),
-              "updated_at": reported.get("updated_at")}
+    observed_at = reported.get("observed_at")
+    result = {"state": state,
+              "auth_generation": reported.get("auth_generation"),
+              "observed_at": observed_at,
+              "source": reported.get("source"),
+              "observation_age_seconds": age_of(observed_at)}
     if notifier:
         for bad, cause in FORWARDED_AUTH_STATES.items():
             if state == bad:
                 notifier.raise_(alerting.CRITICAL, cause, repo=args.repo,
-                                detected_at=reported.get("updated_at") or utcnow(),
-                                state=state)
+                                detected_at=observed_at or utcnow(),
+                                state=f"{state} gen={result['auth_generation']}")
             else:
                 notifier.clear(cause, repo=args.repo, detected_at=utcnow())
     return result
