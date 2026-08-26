@@ -288,3 +288,20 @@ def test_runtime_pins_the_installation_rather_than_taking_the_first():
         assert "installs[0]['id']" not in source, f"{module} still guesses"
         assert "GOVERNOR_INSTALLATION_ID = 155393018" in source
         assert "InstallationMismatch" in source
+
+
+def test_fingerprint_refuses_to_hash_nothing(tmp_path):
+    """Observed live: `openssl` absent from PATH produced zero bytes, and
+    sha256("") is stable enough that three distinct keys reported the same
+    fingerprint. A rotation cannot be verified by a constant."""
+    empty = tmp_path / "not-a-key.pem"
+    empty.write_text("this is not a PEM\n")
+    with pytest.raises(key_verify.FingerprintUnavailable):
+        key_verify.fingerprint(empty)
+
+
+def test_unfingerprintable_key_fails_the_whole_verdict(tmp_path):
+    result = key_verify.verify(tmp_path / "missing.pem")
+    assert result["steps"]["readable_private_key"] == "FAIL"
+    assert result["verdict"] == "FAIL"
+    assert result["fingerprint"] is None

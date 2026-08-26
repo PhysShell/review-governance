@@ -30,13 +30,28 @@ EXPECTED_INSTALLATION_ID = 155393018
 EXPECTED_REPO = "PhysShell/evm-from-scratch"
 
 
+class FingerprintUnavailable(Exception):
+    """Refusing to hash nothing and call it a key."""
+
+
 def fingerprint(pem_path) -> str:
     """SHA-256 over the DER public key. Same key -> same value on any host,
-    which is what makes "the runtime is using K_edge" checkable at all."""
-    der = subprocess.run(
+    which is what makes "the runtime is using K_edge" checkable at all.
+
+    Empty output is rejected rather than hashed. A missing `openssl`, an
+    unreadable file or a wrong passphrase all produce zero bytes, and
+    `sha256("")` is a perfectly stable value — so without this guard three
+    different keys cheerfully report the same fingerprint and the rotation
+    looks verified. Observed exactly once, which was enough.
+    """
+    proc = subprocess.run(
         ["openssl", "rsa", "-in", str(pem_path), "-pubout", "-outform", "DER"],
-        capture_output=True, check=True).stdout
-    return hashlib.sha256(der).hexdigest()[:16]
+        capture_output=True)
+    if proc.returncode != 0 or not proc.stdout:
+        raise FingerprintUnavailable(
+            f"no public key derived from {pem_path}: "
+            f"openssl exited {proc.returncode} with {len(proc.stdout)} bytes")
+    return hashlib.sha256(proc.stdout).hexdigest()[:16]
 
 
 def b64url(data: bytes) -> str:
@@ -88,9 +103,10 @@ def verify(pem_path, *, app_id=EXPECTED_APP_ID,
               "steps": {}}
     try:
         result["fingerprint"] = fingerprint(pem_path)
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FingerprintUnavailable) as exc:
         result["fingerprint"] = None
         result["steps"]["readable_private_key"] = "FAIL"
+        result["error"] = str(exc)
         result["verdict"] = "FAIL"
         return result
     result["steps"]["readable_private_key"] = "PASS"
