@@ -335,6 +335,115 @@ INDEPENDENT_FAILURE_DOMAIN_WATCHDOG   PASS
 Until then A5a stays `BLOCKED`, and the architectural decision alone does
 not promote it.
 
+## Amendment A5a-c2 — three defects found in review of the c1 evidence
+
+Preregistered before the fixes. A5a returns to `HOLD` until all three close;
+the core mechanisms stay `PASS`.
+
+### c2-1 — the external watchdog SLO was never observed *after* the fix
+
+The c1 capture shows detection at a heartbeat age of **321.9 s** because the
+success had been standing since before `--context` was added; the first
+watch ran a full window and revoked nothing precisely because of that
+defect. The 35 s figure belongs to the earlier **in-host** prototype, not to
+the external domain.
+
+```text
+INDEPENDENT_FAILURE_DOMAIN_WATCHDOG        PASS (mechanism)
+EXTERNAL_WATCHDOG_DETECTION_SLO_AFTER_FIX  NOT_YET_OBSERVED
+```
+
+Required: a fresh run on the fixed, deployed watchdog under systemd — fresh
+heartbeat, fresh probe success, kill the primary, and measure
+detection → `failure` CONFIRMED. Whatever the number is, it is recorded as
+the SLO. If it comes out at 70 s, the SLO is 70 s; seconds are not
+negotiable by assertion.
+
+### c2-2 — there is no fast path from the edge to the primary
+
+`edge_service` verifies, stores durably, and ACKs — and stops there. The
+primary's `reconcile.py` reads GitHub and deliberately never consults the
+spool. Both properties are correct in isolation, and together they mean the
+decision recorded in A5a-c1 is not yet implemented:
+
+```text
+DECIDED    webhook = primary healthy-path detector, polling = fallback
+ACTUAL     webhook -> edge durable spool -> (nothing reads it)
+           primary -> polls GitHub anyway
+```
+
+A very reliable mailbox nobody opens. The fix keeps the network direction —
+the primary stays outbound-only:
+
+```text
+primary -> authenticated pull from the edge
+           GET /signals?after=<cursor>
+           returns metadata only:
+               delivery_guid · event · action · repository · body_hash · seq
+primary  -> on a signal: re-read GitHub, write a durable observation,
+            advance its cursor
+reconciliation -> UNCHANGED: reads GitHub directly every <= 30 s and never
+            depends on the edge cursor or spool
+```
+
+Required live fixture: `delivery received_at → primary observed_at < 10 s`
+on the healthy path, followed by another `DROPPED` delivery proving
+reconciliation still catches it independently.
+
+### c2-3 — `fd77f989…` cannot be verified against a disabled ruleset
+
+`canonical_ruleset()` contains `enforcement: active` and `canonical_hash()`
+hashes the whole object, while the cutover sequence requires creating the
+ruleset **disabled**, hashing the readback, and only then flipping to
+active. A disabled object necessarily hashes differently. SHA-256 has not
+yet learned to infer intent.
+
+```text
+POLICY_HASH            canonical object WITHOUT enforcement — proves target,
+                       context, integration_id, strict, bypass, rules
+DISABLED_RULESET_HASH  exact object with enforcement=disabled
+ACTIVE_RULESET_HASH    exact object with enforcement=active (fd77f989… may
+                       remain this value)
+```
+
+A5b then verifies: create disabled → readback matches `DISABLED_RULESET_HASH`
+**and** `POLICY_HASH`; flip active → readback matches `ACTIVE_RULESET_HASH`
+**and** `POLICY_HASH` unchanged. The state transition stops masquerading as
+a policy change.
+
+### A5b preflight (not A5a acceptance criteria)
+
+```text
+KEY SPLIT   generate K_primary and K_edge, deploy and verify each, confirm
+            heartbeat/edge/reconciliation healthy, delete the shared K0,
+            then prove K0 is rejected while both new keys work.
+            Evidence keeps fingerprints only.
+            This is rotation/revocation isolation, NOT permission isolation:
+            both keys carry the same App permissions, so an attacker with
+            the edge PEM bypasses WatchdogCapability entirely. Its value is
+            that the edge credential can be killed without killing the
+            primary.
+
+ALERTING    two independent signal sources for a single operator: an
+            external uptime monitor on /healthz (60 s, alert after two
+            consecutive failures), and incident notifications from
+            edge/primary for primary_stale > 45 s, any watchdog incident,
+            OUTCOME_UNKNOWN/FAILED revocation, inability to mint an
+            installation token, AUTH_LOST, and no successful reconciliation
+            for > 60 s. Payload carries severity, incident_id, repo,
+            pr_number, check_run_id, cause, detected_at, state — never
+            webhook bodies, secrets or provider content. Recovery alerts are
+            mandatory, or a red light quietly becomes a green one nobody
+            looks at.
+```
+
+### Inventory is frozen at cutover, not reused
+
+PR #8 has already moved from `6d81a4d…` to `8aeafa9c…`. The A5a dry run is
+therefore an illustration, not an input: A5b enumerates open PRs and freezes
+their exact heads at cutover time, which is why its first step is worded
+that way.
+
 ## Forbidden
 
 Creating or requiring `ai/final-review`; any ruleset on `main`; touching
