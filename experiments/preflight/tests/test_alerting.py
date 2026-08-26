@@ -305,3 +305,80 @@ def test_unfingerprintable_key_fails_the_whole_verdict(tmp_path):
     assert result["steps"]["readable_private_key"] == "FAIL"
     assert result["verdict"] == "FAIL"
     assert result["fingerprint"] is None
+
+
+# --- the delivery ack: an alert that can actually clear ----------------------
+
+def test_ack_marks_received_deliveries_processed(tmp_path):
+    """`delivery_stuck` was unclearable: nothing ever advanced
+    processing_state, so the warning would light once and stay lit."""
+    import edge_service
+    import edge_store
+    import hashlib as _h
+    import hmac as _hm
+
+    store = edge_store.EdgeStore(tmp_path / "e.sqlite3")
+    for i in range(1, 4):
+        store.record_delivery(guid=f"g{i}", event="pull_request",
+                              action="synchronize", repository=REPO,
+                              received_at=f"2026-08-26T00:00:0{i}Z",
+                              body_hash=f"h{i}")
+    svc = edge_service.EdgeService(store, b"w", b"hb")
+    raw = json.dumps({"through": 2}).encode()
+    sig = {"X-Governor-Signature": "sha256=" + _hm.new(
+        b"hb", raw, _h.sha256).hexdigest()}
+
+    status, body = svc.handle_ack(sig, raw)
+    assert status == 202 and body["marked"] == 2
+    states = {r["delivery_guid"]: r["processing_state"]
+              for r in store.deliveries()}
+    assert states == {"g1": "PROCESSED", "g2": "PROCESSED", "g3": "RECEIVED"}
+    store.close()
+
+
+def test_ack_requires_a_signature(tmp_path):
+    import edge_service
+    import edge_store
+    store = edge_store.EdgeStore(tmp_path / "e.sqlite3")
+    svc = edge_service.EdgeService(store, b"w", b"hb")
+    status, _ = svc.handle_ack({}, json.dumps({"through": 5}).encode())
+    assert status == 401
+    store.close()
+
+
+def test_ack_never_touches_a_dropped_delivery(tmp_path):
+    """DROPPED is a deliberate injection for the reconciliation fixture and
+    must stay visible."""
+    import edge_service
+    import edge_store
+    import hashlib as _h
+    import hmac as _hm
+
+    store = edge_store.EdgeStore(tmp_path / "e.sqlite3")
+    store.record_delivery(guid="g1", event="pull_request", action="a",
+                          repository=REPO, received_at="t", body_hash="h")
+    store.set_processing_state("g1", edge_store.DROPPED)
+    svc = edge_service.EdgeService(store, b"w", b"hb")
+    raw = json.dumps({"through": 99}).encode()
+    sig = {"X-Governor-Signature": "sha256=" + _hm.new(
+        b"hb", raw, _h.sha256).hexdigest()}
+    svc.handle_ack(sig, raw)
+    assert store.deliveries()[0]["processing_state"] == "DROPPED"
+    store.close()
+
+
+def test_ack_failure_does_not_disturb_the_primary_cursor(tmp_path, monkeypatch):
+    """Best effort by design: the cursor is the only record that matters."""
+    import observations
+    import signal_client
+
+    store = observations.ObservationStore(tmp_path / "obs.sqlite3")
+    store.advance(7, "2026-08-26T00:00:00Z")
+    monkeypatch.setattr(signal_client, "fetch_signals",
+                        lambda ep, sec, after: (200, {"signals": []}))
+    monkeypatch.setattr(signal_client, "ack",
+                        lambda ep, sec, through: None)   # ack fails
+    result = signal_client.drain("http://edge", b"hb", store, REPO)
+    assert result["cursor"] == 7
+    assert store.cursor() == 7
+    store.close()

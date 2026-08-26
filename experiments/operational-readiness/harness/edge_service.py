@@ -100,6 +100,30 @@ class EdgeService:
                      "signals": signals,
                      "note": "metadata only; re-read GitHub for the truth"}
 
+    # --- ack -------------------------------------------------------------
+    def handle_ack(self, headers, raw):
+        """The primary saying how far it has got. Advisory, never authority.
+
+        This does not tell the primary anything and cannot be used to skip
+        work: the primary's own cursor is unaffected, and reconciliation
+        ignores both. Its only job is to let `delivery_stuck` describe a
+        condition that can actually end.
+        """
+        lower = {k.lower(): v for k, v in headers.items()}
+        if not verify(self.heartbeat_secret, raw,
+                      lower.get("x-governor-signature")):
+            self.rejected.append({"at": utcnow(), "reason": "bad_ack_sig"})
+            return 401, {"error": "signature verification failed"}
+        try:
+            body = json.loads(raw.decode())
+            through = int(body["through"])
+        except (ValueError, KeyError, TypeError):
+            return 400, {"error": "ack needs an integer `through`"}
+        moved = self.store.mark_processed_through(through)
+        return 202, {"accepted": True, "through": through, "marked": moved,
+                     "note": "advisory only; the primary's cursor is the "
+                             "authority and is not stored here"}
+
     # --- heartbeat -------------------------------------------------------
     def handle_heartbeat(self, headers, raw):
         lower = {k.lower(): v for k, v in headers.items()}
@@ -144,6 +168,8 @@ def serve(service, port):
                 status, body = service.handle_webhook(headers, raw)
             elif self.path == "/primary/heartbeat":
                 status, body = service.handle_heartbeat(headers, raw)
+            elif self.path == "/signals/ack":
+                status, body = service.handle_ack(headers, raw)
             else:
                 status, body = 404, {"error": "not found"}
             self._send(status, body)

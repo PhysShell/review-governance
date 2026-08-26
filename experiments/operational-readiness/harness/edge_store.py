@@ -95,6 +95,25 @@ class EdgeStore:
             " ORDER BY rowid LIMIT ?", (int(cursor), int(limit))).fetchall()
         return [dict(row) for row in rows]
 
+    def mark_processed_through(self, seq):
+        """Advisory acknowledgement from the primary, monotone by construction.
+
+        The primary's cursor stays the only authority on what it processed;
+        this is the edge's *observational* copy, and it exists so the
+        `delivery_stuck` warning can clear. Without it the state is written
+        once and never advanced, which makes the alert permanently true and
+        therefore permanently ignored.
+
+        Only RECEIVED rows move. A DROPPED row is a deliberate injection and
+        must stay visible to reconciliation fixtures.
+        """
+        cur = self.conn.execute(
+            "UPDATE webhook_deliveries SET processing_state=? "
+            "WHERE rowid <= ? AND processing_state=?",
+            (PROCESSED, int(seq), RECEIVED))
+        self.conn.commit()
+        return cur.rowcount
+
     def deliveries(self, state=None):
         if state:
             return self.conn.execute(

@@ -64,6 +64,29 @@ def fetch_signals(endpoint, secret, after):
         return None, {"error": f"{type(exc).__name__}: {exc}"}
 
 
+def ack(endpoint, secret, through):
+    """Tell the edge how far we have got. Best effort on purpose.
+
+    A failed ack costs a stale `delivery_stuck` warning and nothing else —
+    it must never hold up or alter the primary's own cursor, which is the
+    only record that matters.
+    """
+    raw = json.dumps({"through": int(through)}).encode()
+    signature = "sha256=" + hmac.new(secret, raw, hashlib.sha256).hexdigest()
+    req = urllib.request.Request(
+        f"{endpoint.rstrip('/')}/signals/ack", data=raw, method="POST",
+        headers={"User-Agent": "governor-primary-signals",
+                 "Content-Type": "application/json",
+                 "X-Governor-Signature": signature})
+    try:
+        # Shorter than the signal read on purpose: this is the optional half
+        # of the cycle and must never be the reason the fast path stalls.
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status
+    except Exception:
+        return None
+
+
 def open_pr_snapshot(repo, token=None):
     """Re-read the open PR set from GitHub.
 
@@ -138,7 +161,10 @@ def drain(endpoint, secret, store, repo, limit_batches=1, notifier=None):
                               "observed_at": observed_at,
                               "latency_seconds": round(latency, 3),
                               "pr_count": len(snapshot)})
-    return {"processed": processed, "cursor": store.cursor()}
+    cursor = store.cursor()
+    if cursor:
+        ack(endpoint, secret, cursor)
+    return {"processed": processed, "cursor": cursor}
 
 
 def main():

@@ -120,6 +120,7 @@ def test_observation_stores_the_whole_snapshot_not_a_guess(tmp_path, monkeypatch
     monkeypatch.setattr(signal_client, "open_pr_snapshot",
                         lambda repo, token=None: [{"number": 1, "head": "aaa"},
                                                   {"number": 2, "head": "bbb"}])
+    monkeypatch.setattr(signal_client, "ack", lambda ep, sec, through: 202)
     result = signal_client.drain("http://edge", HEARTBEAT_SECRET, store, REPO)
     assert result["processed"][0]["pr_count"] == 2
     stored = store.observations()[0]
