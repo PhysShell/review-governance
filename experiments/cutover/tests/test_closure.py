@@ -175,3 +175,17 @@ def test_closure_has_no_write_path():
     # and it reaches GitHub only through readers
     assert "bootstrap.carriers" in code
     assert "inv.enumerate_open" in code
+
+
+def test_one_good_carrier_beside_a_bad_one_is_ambiguous(monkeypatch):
+    """A head carrying two Governor runs of the same context shows an
+    operator two verdicts from the same App, with no way to tell which one
+    the gate consulted."""
+    bad = {**good_run(run_id=2), "conclusion": "cancelled"}
+    s = _carrier(monkeypatch, [good_run(run_id=1), bad])
+    assert s["state"] == "AMBIGUOUS"
+    assert s["matching"] == [1]
+
+
+def test_clean_head_still_confirms(monkeypatch):
+    assert _carrier(monkeypatch, [good_run()])["state"] == "CONFIRMED"

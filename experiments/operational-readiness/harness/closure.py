@@ -84,8 +84,19 @@ def carrier_state(token, repo, item):
     base = {"pr_number": item["pr_number"], "head_sha": head,
             "carriers_found": [r["id"] for r in runs],
             "matching": [r["id"] for r in matching]}
-    if len(matching) == 1:
+    # CONFIRMED requires the head to be *clean*, not merely to contain one
+    # good carrier. One matching run beside a non-matching Governor run of
+    # the same context is an ambiguous head: an operator reading the PR
+    # sees two verdicts from the same App and cannot tell which one the
+    # gate consulted. Hardening applied after the 3b verdict was recorded;
+    # it does not revise that verdict, which was taken on heads carrying
+    # exactly one run each.
+    if len(runs) == 1 and len(matching) == 1:
         return {**base, "state": "CONFIRMED", "check_run_id": matching[0]["id"]}
+    if len(matching) == 1 and len(runs) > 1:
+        return {**base, "state": "AMBIGUOUS",
+                "cause": f"{len(runs)} Governor carriers of this context on "
+                         "one head, only one of which matches"}
     if not runs:
         return {**base, "state": "MISSING",
                 "cause": "no Governor ai/final-review on this head"}
