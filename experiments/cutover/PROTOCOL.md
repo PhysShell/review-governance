@@ -88,8 +88,9 @@ are **not** inputs. Using them would be the `pulls[0]` defect wearing a
 roadmap.
 
 If a HEAD moves between the freeze and step 3, the bootstrap still targets
-the frozen HEAD and the new head simply carries no check, which fails
-closed. That is recorded, not repaired silently.
+the frozen HEAD — the snapshot is not repaired silently. The consequence is
+**not** "that is fine, it fails closed": step 3b exists precisely to catch
+that divergence and stop the stage before activation.
 
 ## Step 3 — bootstrap, fail closed
 
@@ -112,16 +113,59 @@ non-draft PR  no provider round either
 
 This is the first moment the production context exists anywhere.
 
-**Bootstrap must be complete before step 4.** A partial bootstrap followed
-by an active ruleset produces PRs blocked by a bare absence rather than by a
-readable Governor verdict, and an operator cannot tell those apart — A5a
-already established that GitHub returns the identical `"…is expected."` for
-a missing check and for base drift. Incomplete bootstrap → stop, do not
-activate.
+**Bootstrap must be complete against the frozen inventory** — that is the
+referent, stated explicitly, because "complete" without one is unfalsifiable.
+Completeness against *reality* is a different claim and is step 3b's job.
+
+A partial bootstrap followed by an active ruleset produces PRs blocked by a
+bare absence rather than by a readable Governor verdict, and an operator
+cannot tell those apart: A5a established that GitHub returns the identical
+`"…is expected."` for a missing check and for base drift. So an incomplete
+bootstrap stops the stage here as well.
 
 Bootstrap deliberately precedes the ruleset for the same reason: every open
 PR should meet the gate already carrying an explicit `NOT_ESTABLISHED`,
 not an empty space.
+
+## Step 3b — pre-activation closure
+
+Step 3 establishes that the **frozen** inventory was bootstrapped. That is
+not the same claim as "GitHub is closed right now", and the gap between them
+is the whole of steps 2 to 4: in that window a PR can open, close, change
+base, or move its head. A bootstrap can therefore be complete against the
+snapshot and incomplete against reality, and `BOOTSTRAP_COMPLETE` without a
+named referent is exactly the kind of value this programme keeps catching.
+
+So, immediately before activation, a fresh **read-only** enumeration:
+
+```text
+for every PR currently open against main:
+    its CURRENT full HEAD must carry
+        name        ai/final-review
+        conclusion  failure
+        verdict     NOT_ESTABLISHED
+        app.id      4669438
+    confirmed by independent readback of that exact run
+```
+
+Any delta at all — a new PR, a closed one, a changed base, a moved head —
+
+```text
+STOP. Do not activate. Do not bootstrap the delta on the spot.
+```
+
+Silently bootstrapping the delta would repair a snapshot mid-flight and
+leave nobody able to say afterwards what was frozen and what was patched.
+The correct response is to record the delta, freeze a new inventory as an
+amendment, and repeat steps 3 and 3b from there.
+
+Two separate acceptance facts follow, and the ruleset is created only when
+both hold:
+
+```text
+FROZEN_INVENTORY_BOOTSTRAPPED            the snapshot was covered
+PREACTIVATION_CURRENT_INVENTORY_CLOSED   reality is covered, now
+```
 
 ## Step 4 — ruleset, disabled first
 
@@ -168,7 +212,54 @@ One disposable PR into the **real** `main`, with no successful
 
 ```text
 REQUIRED OUTCOME   merge attempt -> BLOCKED
+                   AND blocked for the reason under test
 ```
+
+### Why the outcome alone proves nothing
+
+This protocol already records that under `strict`, base drift and a missing
+required check return the **identical** `"…is expected."`. A probe whose
+base moved before the attempt would be blocked by drift, and writing that
+down as evidence for the required-check path would be a guess wearing the
+shape of a proof — in a document that warns about exactly this defect three
+sections earlier.
+
+GitHub cannot be asked which cause applied. The alternative therefore has to
+be **excluded by construction, before the attempt**, and the predicate has
+to be frozen here rather than decided while looking at a result.
+
+### Fixture validity predicate, evaluated immediately before the attempt
+
+```text
+main_sha_before      recorded
+probe base freshness merge-base(probe, main) == main_sha_before
+                     i.e. the probe is current with main and cannot be BEHIND
+check absence        no ai/final-review run of any conclusion on the probe HEAD
+ruleset              enforcement active
+                     POLICY_HASH and ACTIVE_RULESET_HASH still match
+```
+
+Only with all four true is the merge attempted, at the exact probe HEAD.
+Afterwards `main_sha_after` is recorded too, so a base that moved *during*
+the attempt is visible rather than assumed away.
+
+```text
+if main moved, or any predicate fails:
+    SMOKE_FIXTURE_STALE
+    the attempt is NOT counted, in either direction
+    recreate or rebase the disposable probe and re-evaluate
+```
+
+This is a validity predicate, not a retry loop. It is frozen before the
+first attempt, it can only invalidate a fixture, and it can never turn a
+failed test into a passing one — a genuine block on a fresh, checkless
+probe counts the first time.
+
+As a secondary, corroborating observation only: `mergeStateStatus` is
+expected to read `BLOCKED` rather than `BEHIND`, which would distinguish the
+two causes directly. It is recorded but is **not** load-bearing, because
+that field's behaviour in this exact configuration has not been established
+by this programme, and the freshness predicate does not depend on it.
 
 Deliberately not done, and each for a reason:
 
@@ -230,18 +321,21 @@ NO modification of PR #12 or PR #15
 
 ```text
 PROTOCOL_FROZEN_BEFORE_MUTATION      PASS / FAIL
-FRESH_INVENTORY_FREEZE               PASS / FAIL
-BOOTSTRAP_COMPLETE_FAIL_CLOSED       PASS / FAIL
-BOOTSTRAP_READBACK_CONFIRMED         PASS / FAIL
-NO_PROVIDER_ROUND_STARTED            PASS / FAIL
-RULESET_CREATED_DISABLED             PASS / FAIL
-DISABLED_READBACK_HASHES_MATCH       PASS / FAIL
-ACTIVATED                            PASS / FAIL
-ACTIVE_READBACK_HASHES_MATCH         PASS / FAIL
-POLICY_HASH_UNCHANGED_ACROSS_FLIP    PASS / FAIL
-NEGATIVE_SMOKE_TEST_BLOCKED          PASS / FAIL
-PROBE_CLOSED_UNMERGED                PASS / FAIL
-NOTHING_MERGED                       PASS / FAIL
+FRESH_INVENTORY_FREEZE                   PASS / FAIL
+FROZEN_INVENTORY_BOOTSTRAPPED            PASS / FAIL
+BOOTSTRAP_READBACK_CONFIRMED             PASS / FAIL
+PREACTIVATION_CURRENT_INVENTORY_CLOSED   PASS / FAIL
+NO_PROVIDER_ROUND_STARTED                PASS / FAIL
+RULESET_CREATED_DISABLED                 PASS / FAIL
+DISABLED_READBACK_HASHES_MATCH           PASS / FAIL
+ACTIVATED                                PASS / FAIL
+ACTIVE_READBACK_HASHES_MATCH             PASS / FAIL
+POLICY_HASH_UNCHANGED_ACROSS_FLIP        PASS / FAIL
+SMOKE_PROBE_BASE_FRESH                   PASS / FAIL
+SMOKE_PROBE_CHECK_ABSENT                 PASS / FAIL
+NEGATIVE_SMOKE_TEST_BLOCKED              PASS / FAIL
+PROBE_CLOSED_UNMERGED                    PASS / FAIL
+NOTHING_MERGED                           PASS / FAIL
 
 A5b_PRODUCTION_CUTOVER: PASS / FAIL
 PRODUCTION_ENFORCEMENT: ACTIVE / NOT_ACTIVE
@@ -262,3 +356,50 @@ round, the production soak and its statistics, multi-repo rollout, provider
 abstraction, an SCM adapter for Azure DevOps Server, and the Pullfrog
 runtime spike in issue #13. Each is a post-cutover question, and none of
 them is a reason to hurry this one.
+
+## Amendment A5b-r1 — two defects found in review of the frozen protocol
+
+Recorded before either was fixed, so the record of what was wrong does not
+depend on reading a diff.
+
+### r1-1 — the protocol contradicted itself about snapshot divergence
+
+Step 2 said a head that moved after the freeze was fine and failed closed.
+Step 3 said the bootstrap must be complete before activation *because* a
+bare absence is indistinguishable from base drift. Both sentences were in
+the same frozen document, and they cannot both govern.
+
+Worse, the divergence was never only about `synchronize`: between steps 2
+and 4 a PR can open, close, or change base. A bootstrap could therefore be
+complete against the snapshot and incomplete against GitHub, leaving
+`BOOTSTRAP_COMPLETE_FAIL_CLOSED` with no answer to "complete relative to
+what".
+
+Fixed by Step 3b: a fresh read-only enumeration immediately before
+activation, `STOP` on any delta rather than an on-the-spot bootstrap, and
+two separately named acceptance facts —
+`FROZEN_INVENTORY_BOOTSTRAPPED` and
+`PREACTIVATION_CURRENT_INVENTORY_CLOSED`.
+
+### r1-2 — the smoke test could have passed for the wrong reason
+
+Step 5 required only that a merge attempt be BLOCKED. Under `strict`, a
+probe whose base had moved would be blocked by drift and produce the
+identical message — which this same document warns about three sections
+earlier. The test would have passed while proving nothing about the
+required-check path.
+
+Fixed by a fixture validity predicate frozen in advance: `main_sha_before`
+recorded, `merge-base(probe, main) == main_sha_before` so the probe cannot
+be BEHIND, no `ai/final-review` of any conclusion on the probe HEAD, and the
+ruleset active with matching hashes. `main_sha_after` is recorded as well.
+A failed predicate yields `SMOKE_FIXTURE_STALE` and the attempt is not
+counted in either direction. It can only invalidate a fixture; it can never
+convert a failed test into a passing one.
+
+### What this says about the stage
+
+Both defects sat in the class this programme has now found five times: a
+value that would have been reported as evidence while actually resting on a
+coincidence of timing. Finding them in preregistration rather than in a
+report is the entire reason the preregistration step exists.
