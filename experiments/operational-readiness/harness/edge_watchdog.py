@@ -208,7 +208,8 @@ def cmd_check(args):
         if not stale:
             return result
         token = installation_token()
-        targets, error = passing_governor_runs(token, args.repo, args.branches)
+        targets, error = passing_governor_runs(token, args.repo, args.branches,
+                                               context=args.context)
         result["passing_runs_found"] = targets
         if error:
             result["error"] = error
@@ -230,14 +231,24 @@ def cmd_check(args):
 
 
 def cmd_watch(args):
+    """Poll until something is revoked, then stop.
+
+    The window-elapsed result reports the *last observed* state rather than
+    a hardcoded one: a run that ends without revoking must still say whether
+    the primary looked alive, or the operator learns nothing from it.
+    """
     deadline = time.time() + args.window
+    last = None
+    polls = 0
     while time.time() < deadline:
-        result = cmd_check(args)
-        if result.get("revocations"):
-            return result
+        last = cmd_check(args)
+        polls += 1
+        if last.get("revocations"):
+            last["polls"] = polls
+            return last
         time.sleep(args.interval)
-    return {"checked_at": utcnow(), "primary_stale": False,
-            "note": "window elapsed without a stale primary"}
+    return {**(last or {}), "polls": polls, "revocations": [],
+            "note": "window elapsed without revoking; last observed state above"}
 
 
 def main():
@@ -245,6 +256,9 @@ def main():
     ap.add_argument("command", choices=["check", "watch"])
     ap.add_argument("--repo", default="PhysShell/evm-from-scratch")
     ap.add_argument("--branches", nargs="*", default=["main"])
+    ap.add_argument("--context", default=PRODUCTION_CONTEXT,
+                    help="check-run name to police; probe contexts are used "
+                         "for qualification without repointing production")
     ap.add_argument("--db", default=str(CONFIG_DIR / "edge.sqlite3"))
     ap.add_argument("--stale-after", type=int, default=STALE_AFTER_SECONDS)
     ap.add_argument("--interval", type=int, default=10)
