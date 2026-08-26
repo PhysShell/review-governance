@@ -1,0 +1,19 @@
+[Unit]
+Description=Governor primary fast path (pull signal metadata from the edge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nixos/Documents/repos/review-governance/experiments/operational-readiness/harness
+Environment=GOVERNOR_CONFIG_DIR=%h/.config/review-governor
+# Invoked through the flake devshell rather than a pinned /nix/store path:
+# a pinned interpreter is one garbage collection away from a service that
+# will not start, and this program has no appetite for silent supervision
+# failures.
+ExecStart=/run/current-system/sw/bin/nix develop /home/nixos/Documents/repos/review-governance --command python3 signal_client.py --endpoint https://192-248-184-141.sslip.io --repo PhysShell/evm-from-scratch --db %h/.config/review-governor/observations.sqlite3 --interval 2 --window 0
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

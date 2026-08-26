@@ -34,12 +34,14 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import alerting
 import edge_store
 
 API = "https://api.github.com"
 CONFIG_DIR = Path(os.environ.get(
     "GOVERNOR_EDGE_CONFIG", os.path.expanduser("~/.config/review-governor-edge")))
 GOVERNOR_APP_ID = 4669438
+GOVERNOR_INSTALLATION_ID = 155393018
 PRODUCTION_CONTEXT = "ai/final-review"
 STALE_AFTER_SECONDS = 45
 NON_PASSING = frozenset({"failure", "cancelled", "action_required", "timed_out"})
@@ -116,12 +118,26 @@ def guarded(method, path, bearer, body=None):
     return request(method, path, bearer, body)
 
 
-def installation_token():
+class InstallationMismatch(Exception):
+    """The App is installed somewhere this watchdog was not told about."""
+
+
+def installation_token(installation_id=GOVERNOR_INSTALLATION_ID):
+    """Mint against a pinned installation; see the note in governor.py.
+
+    On the edge this matters twice over: the watchdog writes, and a runtime
+    that quietly follows an unexpected installation would be writing
+    somewhere nobody reviewed.
+    """
     jwt = app_jwt()
     status, installs = request("GET", "/app/installations", jwt)
     assert status == 200 and installs, (status, installs)
+    ids = [i["id"] for i in installs]
+    if installation_id not in ids:
+        raise InstallationMismatch(
+            f"expected installation {installation_id}, GitHub reports {ids}")
     status, minted = request(
-        "POST", f"/app/installations/{installs[0]['id']}/access_tokens", jwt)
+        "POST", f"/app/installations/{installation_id}/access_tokens", jwt)
     assert status == 201, (status, minted)
     return minted["token"]
 
@@ -195,7 +211,51 @@ def revoke(token, repo, target, detected_at):
             "revoked_at": utcnow()}
 
 
-def cmd_check(args):
+def alert_on_heartbeat(notifier, args, result, age):
+    """Heartbeat thresholds, as transitions rather than as a log.
+
+    Ordered worst-first and mutually exclusive: a primary that is CRITICAL
+    must not also be sitting in the WARNING state, or the recovery for one
+    of them never arrives and the operator is left holding a stale red.
+    """
+    if notifier is None:
+        return
+    common = {"repo": args.repo, "detected_at": result["checked_at"],
+              "state": f"heartbeat_age={result['heartbeat_age_seconds']}"}
+    if age is None or age > args.stale_after:
+        notifier.clear("heartbeat_age_warning", **common)
+        notifier.raise_(alerting.CRITICAL, "heartbeat_age_critical", **common)
+    elif age > args.warn_after:
+        notifier.clear("heartbeat_age_critical", **common)
+        notifier.raise_(alerting.WARNING, "heartbeat_age_warning", **common)
+    else:
+        notifier.clear("heartbeat_age_critical", **common)
+        notifier.clear("heartbeat_age_warning", **common)
+
+
+def alert_on_stuck_deliveries(notifier, args, store, now):
+    """A delivery that sat in RECEIVED past its budget means the fast path
+    is not draining — the mailbox is filling and nobody is opening it."""
+    if notifier is None:
+        return
+    stuck = []
+    for row in store.deliveries(state=edge_store.RECEIVED):
+        try:
+            age = (alerting.parse_ts(now) -
+                   alerting.parse_ts(row["received_at"])).total_seconds()
+        except ValueError:
+            continue
+        if age > args.delivery_budget:
+            stuck.append(row["delivery_guid"])
+    if stuck:
+        notifier.raise_(alerting.WARNING, "delivery_stuck", repo=args.repo,
+                        detected_at=now, state=f"{len(stuck)} beyond "
+                        f"{args.delivery_budget}s")
+    else:
+        notifier.clear("delivery_stuck", repo=args.repo, detected_at=now)
+
+
+def cmd_check(args, notifier=None):
     store = edge_store.EdgeStore(args.db)
     try:
         beat, age = heartbeat_age(store)
@@ -205,9 +265,25 @@ def cmd_check(args):
                   "heartbeat_age_seconds": None if age is None else round(age, 1),
                   "stale_after_seconds": args.stale_after,
                   "primary_stale": stale, "revocations": []}
+        alert_on_heartbeat(notifier, args, result, age)
+        alert_on_stuck_deliveries(notifier, args, store, result["checked_at"])
         if not stale:
             return result
-        token = installation_token()
+        try:
+            token = installation_token()
+        except Exception as exc:
+            # Losing the ability to mint is losing the ability to revoke.
+            # It must page, and it must not look like a quiet no-op poll.
+            result["error"] = {"installation_token": type(exc).__name__}
+            if notifier:
+                notifier.raise_(alerting.CRITICAL,
+                                "installation_token_mint_failed",
+                                repo=args.repo, detected_at=result["checked_at"],
+                                state=type(exc).__name__)
+            return result
+        if notifier:
+            notifier.clear("installation_token_mint_failed", repo=args.repo,
+                           detected_at=result["checked_at"])
         targets, error = passing_governor_runs(token, args.repo, args.branches,
                                                context=args.context)
         result["passing_runs_found"] = targets
@@ -225,9 +301,57 @@ def cmd_check(args):
             affected=[t["check_run_id"] for t in targets],
             results=result["revocations"])
         result["restores_automatically"] = False
+        alert_on_incident(notifier, args, result, detected_at)
         return result
     finally:
         store.close()
+
+
+def alert_on_incident(notifier, args, result, detected_at):
+    """An incident always pages. A revocation that did not land pages
+    separately and louder: `OUTCOME_UNKNOWN` means the authorization may
+    still be standing, which is the one state nobody may assume away."""
+    if notifier is None:
+        return
+    notifier.raise_(alerting.CRITICAL, "watchdog_incident", repo=args.repo,
+                    incident_id=result.get("incident_id"),
+                    detected_at=detected_at,
+                    state=f"{len(result['revocations'])} revoked")
+    for revocation in result["revocations"]:
+        if revocation["state"] == "OUTCOME_UNKNOWN":
+            notifier.raise_(alerting.CRITICAL,
+                            "watchdog_revocation_outcome_unknown",
+                            repo=args.repo,
+                            pr_number=revocation.get("pr_number"),
+                            check_run_id=revocation.get("check_run_id"),
+                            incident_id=result.get("incident_id"),
+                            detected_at=detected_at, state="OUTCOME_UNKNOWN")
+        elif revocation["state"] == "FAILED":
+            notifier.raise_(alerting.CRITICAL, "watchdog_revocation_failed",
+                            repo=args.repo,
+                            pr_number=revocation.get("pr_number"),
+                            check_run_id=revocation.get("check_run_id"),
+                            incident_id=result.get("incident_id"),
+                            detected_at=detected_at, state="FAILED")
+
+
+def build_notifier(args):
+    """No channel configured is a state worth seeing, not a silent default.
+
+    The deployed unit must never reach this returning None; `--no-alerts` is
+    how a fixture says so out loud.
+    """
+    if args.no_alerts:
+        return None
+    transport = alerting.transport_from_config(CONFIG_DIR)
+    if transport is None:
+        print(json.dumps({"alerting": "NOT CONFIGURED",
+                          "looked_in": str(CONFIG_DIR / "alerting.json"),
+                          "effect": "incidents will not reach a human"}),
+              flush=True)
+        return None
+    return alerting.Notifier(args.alerts_db, transport,
+                             origin=f"edge watchdog · {args.repo}")
 
 
 def cmd_watch(args):
@@ -252,8 +376,9 @@ def cmd_watch(args):
     last = None
     polls = 0
     incidents = []
+    notifier = build_notifier(args)
     while deadline is None or time.time() < deadline:
-        last = cmd_check(args)
+        last = cmd_check(args, notifier)
         polls += 1
         if last.get("revocations"):
             incidents.append({"incident_id": last.get("incident_id"),
@@ -287,9 +412,22 @@ def main():
                     help="exit after the first revocation. For bounded "
                          "fixtures only — a deployed watchdog that stops "
                          "after one incident has stopped watching.")
+    ap.add_argument("--warn-after", type=int, default=30,
+                    help="heartbeat age that raises a WARNING before the "
+                         "CRITICAL threshold at --stale-after")
+    ap.add_argument("--delivery-budget", type=int, default=120,
+                    help="seconds a delivery may sit in RECEIVED before the "
+                         "fast path is presumed not to be draining")
+    ap.add_argument("--alerts-db", default=str(CONFIG_DIR / "alerts.sqlite3"))
+    ap.add_argument("--no-alerts", action="store_true",
+                    help="run without a notifier. For fixtures that must not "
+                         "page a human, never for the deployed unit.")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
-    result = {"check": cmd_check, "watch": cmd_watch}[args.command](args)
+    if args.command == "check":
+        result = cmd_check(args, build_notifier(args))
+    else:
+        result = cmd_watch(args)
     rendered = json.dumps(result, indent=2, default=str)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)

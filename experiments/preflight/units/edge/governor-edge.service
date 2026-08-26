@@ -1,0 +1,22 @@
+[Unit]
+Description=Governor edge service (webhook receiver + heartbeat sink)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=governor-edge
+Group=governor-edge
+WorkingDirectory=/opt/governor-edge
+Environment=GOVERNOR_EDGE_CONFIG=/var/lib/governor-edge/.config/review-governor-edge
+ExecStart=/usr/bin/python3 /opt/governor-edge/edge_service.py --port 8931
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/governor-edge/.config/review-governor-edge
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

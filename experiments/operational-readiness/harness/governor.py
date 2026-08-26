@@ -35,6 +35,7 @@ CONFIG_DIR = Path(os.environ.get(
     "GOVERNOR_CONFIG_DIR", os.path.expanduser("~/.config/review-governor")))
 REPO = "PhysShell/evm-from-scratch"
 GOVERNOR_APP_ID = 4669438
+GOVERNOR_INSTALLATION_ID = 155393018
 CONTEXT = "ai/final-review-readiness-probe"
 EVIDENCE_SCHEMA = "ReadinessProbeEvidence-v1"
 GOVERNOR_WRITE_ALLOWLIST = ("/check-runs",)
@@ -95,12 +96,28 @@ def governor_write(method, path, bearer, body=None):
     return request(method, path, bearer, body)
 
 
-def installation_token():
+class InstallationMismatch(Exception):
+    """The App is installed somewhere this runtime was not told about."""
+
+
+def installation_token(installation_id=GOVERNOR_INSTALLATION_ID):
+    """Mint against a *pinned* installation.
+
+    This used to take `installs[0]`, which is correct exactly as long as
+    there is one installation and silently wrong the moment there are two —
+    the same shape of guess as the `pulls[0]` defect A5a-c2 removed from the
+    fast path. Pinning it means a second installation is an error someone
+    reads, not a target the Governor drifts onto.
+    """
     jwt = app_jwt()
     status, installs = request("GET", "/app/installations", jwt)
     assert status == 200 and installs, (status, installs)
+    ids = [i["id"] for i in installs]
+    if installation_id not in ids:
+        raise InstallationMismatch(
+            f"expected installation {installation_id}, GitHub reports {ids}")
     status, minted = request(
-        "POST", f"/app/installations/{installs[0]['id']}/access_tokens", jwt)
+        "POST", f"/app/installations/{installation_id}/access_tokens", jwt)
     assert status == 201, (status, minted)
     return minted["token"]
 

@@ -29,6 +29,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import alerting
 import governor
 import observations
 
@@ -84,14 +85,26 @@ def open_pr_snapshot(repo, token=None):
             for p in pulls or []]
 
 
-def drain(endpoint, secret, store, repo, limit_batches=1):
+def drain(endpoint, secret, store, repo, limit_batches=1, notifier=None):
     processed = []
     for _ in range(limit_batches):
         after = store.cursor()
         status, body = fetch_signals(endpoint, secret, after)
         if status != 200:
+            # The primary's continuous view of the edge. Degraded, not fatal:
+            # reconciliation keeps reading GitHub regardless, so this costs
+            # latency — but silence here would hide a receiver that has been
+            # down for hours.
+            if notifier:
+                notifier.raise_(alerting.WARNING,
+                                "webhook_receiver_unavailable", repo=repo,
+                                detected_at=utcnow(),
+                                state=f"http={status}")
             return {"error": body.get("error"), "http_status": status,
                     "processed": processed}
+        if notifier:
+            notifier.clear("webhook_receiver_unavailable", repo=repo,
+                           detected_at=utcnow())
         signals = body.get("signals") or []
         if not signals:
             break
@@ -144,6 +157,8 @@ def main():
                          "position: the cursor also advances past irrelevant "
                          "events, so stopping on it can end the watch before "
                          "anything was actually observed.")
+    ap.add_argument("--alerts-db", default=str(CONFIG_DIR / "alerts.sqlite3"))
+    ap.add_argument("--no-alerts", action="store_true")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
     if not SECRET_PATH.exists():
@@ -151,9 +166,17 @@ def main():
         return 2
     secret = SECRET_PATH.read_bytes().strip()
     store = observations.ObservationStore(args.db)
+    notifier = None
+    if not args.no_alerts:
+        transport = alerting.transport_from_config(CONFIG_DIR)
+        if transport is not None:
+            notifier = alerting.Notifier(
+                args.alerts_db, transport,
+                origin=f"primary fast path · {args.repo}")
     try:
         if args.once:
-            result = drain(args.endpoint, secret, store, args.repo)
+            result = drain(args.endpoint, secret, store, args.repo,
+                           notifier=notifier)
         else:
             # `--window 0` is the deployed configuration: a detector with an
             # expiry date stops detecting, quietly, exactly like the
@@ -161,7 +184,8 @@ def main():
             deadline = None if args.window <= 0 else time.time() + args.window
             all_processed = []
             while deadline is None or time.time() < deadline:
-                batch = drain(args.endpoint, secret, store, args.repo)
+                batch = drain(args.endpoint, secret, store, args.repo,
+                              notifier=notifier)
                 all_processed.extend(batch.get("processed") or [])
                 if args.stop_after_observations and \
                         len(all_processed) >= args.stop_after_observations:
@@ -171,6 +195,8 @@ def main():
                       "window_expired": deadline is not None}
     finally:
         store.close()
+        if notifier:
+            notifier.close()
     rendered = json.dumps(result, indent=2, default=str)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
