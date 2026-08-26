@@ -34,6 +34,8 @@ CONFIG_DIR = Path(os.environ.get(
     "GOVERNOR_CONFIG_DIR", os.path.expanduser("~/.config/review-governor")))
 RECONCILIATION_MAX_AGE = 60
 WATCHDOG_MAX_AGE = 60
+STARTUP_GRACE = 90
+STARTED_AT = time.monotonic()
 FORWARDED_AUTH_STATES = {"AUTH_LOST": "auth_lost",
                          "REFRESH_OUTCOME_UNKNOWN": "refresh_outcome_unknown"}
 
@@ -50,6 +52,28 @@ def age_of(timestamp):
                 alerting.parse_ts(timestamp)).total_seconds()
     except ValueError:
         return None
+
+
+def in_startup_grace(args):
+    """Has this sentinel had time to see anything yet?
+
+    Only ever applied to NOT_REPORTED — the absence of data. A timestamp
+    that exists and is old is a real condition and pages immediately, at
+    startup like any other time. Without this split, every restart of the
+    stack pages the operator for the gap between the sentinel coming up and
+    the first sweep landing, and an operator who is woken by routine
+    restarts stops reading the alerts that matter.
+    """
+    return (time.monotonic() - STARTED_AT) < args.startup_grace
+
+
+def _raise_or_hold(notifier, args, state, cause, severity, detail):
+    """Raise, unless this is absence-of-data inside the startup window."""
+    if state == "NOT_REPORTED" and in_startup_grace(args):
+        return "HELD_STARTUP_GRACE"
+    notifier.raise_(severity, cause, repo=args.repo, detected_at=utcnow(),
+                    state=detail)
+    return "RAISED"
 
 
 # --- individual checks -------------------------------------------------------
@@ -71,9 +95,10 @@ def check_reconciliation(args, notifier):
             notifier.clear("reconciliation_stale", repo=args.repo,
                            detected_at=utcnow())
         else:
-            notifier.raise_(alerting.CRITICAL, "reconciliation_stale",
-                            repo=args.repo, detected_at=utcnow(),
-                            state=f"{state['state']} age={state['age_seconds']}")
+            state["alert"] = _raise_or_hold(
+                notifier, args, state["state"], "reconciliation_stale",
+                alerting.CRITICAL,
+                f"{state['state']} age={state['age_seconds']}")
     return state
 
 
@@ -139,9 +164,10 @@ def check_watchdog(args, notifier, healthz):
             notifier.clear("watchdog_not_polling", repo=args.repo,
                            detected_at=utcnow())
         else:
-            notifier.raise_(alerting.CRITICAL, "watchdog_not_polling",
-                            repo=args.repo, detected_at=utcnow(),
-                            state=f"{state['state']} age={state.get('age_seconds')}")
+            state["alert"] = _raise_or_hold(
+                notifier, args, state["state"], "watchdog_not_polling",
+                alerting.CRITICAL,
+                f"{state['state']} age={state.get('age_seconds')}")
     return state
 
 
@@ -204,6 +230,10 @@ def main():
     ap.add_argument("--alerts-db", default=str(CONFIG_DIR / "alerts.sqlite3"))
     ap.add_argument("--reconciliation-max-age", type=int,
                     default=RECONCILIATION_MAX_AGE)
+    ap.add_argument("--startup-grace", type=int, default=STARTUP_GRACE,
+                    help="how long after start an absence of data is treated "
+                         "as not-yet-observed rather than as an incident. "
+                         "Never applied to data that exists and is stale.")
     ap.add_argument("--watchdog-max-age", type=int, default=WATCHDOG_MAX_AGE,
                     help="how stale the edge watchdog's last poll may be "
                          "before it is presumed to have stopped watching")

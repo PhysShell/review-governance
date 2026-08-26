@@ -424,7 +424,70 @@ def test_unreachable_edge_does_not_silently_pass_the_watchdog_check(notifier):
     class Args:
         repo = REPO
         watchdog_max_age = 60
+        startup_grace = 0          # steady state, not the startup window
 
     state = sentinel.check_watchdog(Args(), notifier, None)
     assert state["state"] == "NOT_REPORTED"
     assert notifier.open_causes() == ["watchdog_not_polling"]
+
+
+# --- startup grace: only for absence of data ---------------------------------
+
+def test_startup_grace_holds_absence_of_data(notifier, tmp_path):
+    """Observed live: the sentinel paged reconciliation_stale simply because
+    it started before the first sweep landed. Every stack restart would wake
+    the operator for nothing."""
+    import sentinel
+
+    class Args:
+        repo = REPO
+        health_file = str(tmp_path / "absent.json")
+        auth_state_file = str(tmp_path / "absent-auth.json")
+        reconciliation_max_age = 60
+        startup_grace = 90
+
+    state = sentinel.check_reconciliation(Args(), notifier)
+    assert state["state"] == "NOT_REPORTED"
+    assert state["alert"] == "HELD_STARTUP_GRACE"
+    assert notifier.open_causes() == []
+
+
+def test_startup_grace_expires(notifier, tmp_path, monkeypatch):
+    """Absence of data is still an incident once there has been time for it
+    to appear."""
+    import sentinel
+    monkeypatch.setattr(sentinel, "STARTED_AT",
+                        sentinel.time.monotonic() - 1000)
+
+    class Args:
+        repo = REPO
+        health_file = str(tmp_path / "absent.json")
+        auth_state_file = str(tmp_path / "absent-auth.json")
+        reconciliation_max_age = 60
+        startup_grace = 90
+
+    state = sentinel.check_reconciliation(Args(), notifier)
+    assert state["alert"] == "RAISED"
+    assert notifier.open_causes() == ["reconciliation_stale"]
+
+
+def test_startup_grace_never_suppresses_real_staleness(notifier, tmp_path):
+    """A timestamp that exists and is old is a real condition and pages
+    immediately, at startup like any other time."""
+    import sentinel
+
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps(
+        {"last_complete_sweep_at": "2020-01-01T00:00:00Z", "pr_count": 2}))
+
+    class Args:
+        repo = REPO
+        health_file = str(health)
+        auth_state_file = str(tmp_path / "none.json")
+        reconciliation_max_age = 60
+        startup_grace = 90
+
+    state = sentinel.check_reconciliation(Args(), notifier)
+    assert state["state"] == "STALE"
+    assert state["alert"] == "RAISED"
+    assert notifier.open_causes() == ["reconciliation_stale"]
