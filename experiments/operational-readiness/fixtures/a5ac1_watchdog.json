@@ -1,0 +1,87 @@
+{
+  "probe": "A5a-c1 external failure domain (partial: watchdog half)",
+  "captured_at": "2026-08-26T01:22:35Z",
+  "edge": {
+    "host": "192.248.184.141",
+    "endpoint": "https://192-248-184-141.sslip.io",
+    "tls": "Let's Encrypt cert terminating on the VPS (Caddy), reverse_proxy to 127.0.0.1:8931",
+    "code_hashes_match_repo": true,
+    "app_key": {
+      "delivered": true,
+      "mode": "0600",
+      "owner": "governor-edge",
+      "public_fingerprint": "45e1536b38d315ca",
+      "jwt_works": true,
+      "installation_token_minted": true
+    }
+  },
+  "endpoint_checks": {
+    "healthz_https": 200,
+    "unsigned_webhook_post": 401
+  },
+  "heartbeat": {
+    "direction": "primary -> edge (outbound, signed)",
+    "accepted_status": 202,
+    "secret_matches": true
+  },
+  "watchdog_qualification": {
+    "pr": 27,
+    "head_sha": "9f7437a9968828ac88afb911d5e5221fe1cad254",
+    "check_run_id": 98026540146,
+    "standing_success_merge_state": "CLEAN",
+    "primary_killed": "heartbeat_client process SIGKILLed at ~01:16:04Z",
+    "detected_at": "2026-08-26T01:21:24Z",
+    "heartbeat_age_at_detection_seconds": 321.9,
+    "stale_threshold_seconds": 45,
+    "revocation": {
+      "patch_status": 200,
+      "observed": "failure",
+      "state": "CONFIRMED",
+      "output_title": "Governor: EVIDENCE_INVALIDATED (edge watchdog)"
+    },
+    "merge_after_revocation": {
+      "mergeStateStatus": "BLOCKED",
+      "http": 405,
+      "message": "Required status check \"ai/final-review-readiness-probe\" is failing."
+    },
+    "primary_restored": {
+      "heartbeat_status": 202,
+      "watchdog_revocations": 0,
+      "success_restored": false
+    },
+    "edge_incident": {
+      "incident_id": 1,
+      "stale_age_seconds": 322.0,
+      "primary_instance_id": "primary@nixos",
+      "affected_check_runs": [
+        98026540146
+      ]
+    }
+  },
+  "webhook_rows_still_blocked": {
+    "reason": "GitHub generated zero deliveries for pull_request.opened and .synchronize on a repo where the App is installed and subscribed; hook config is correct, so the webhook is Active=off. There is no REST API to toggle Active.",
+    "hook_config": {
+      "url": "https://192-248-184-141.sslip.io/github/webhook",
+      "content_type": "json",
+      "insecure_ssl": "0",
+      "secret_set": true
+    },
+    "subscribed_events": [
+      "pull_request"
+    ],
+    "edge_delivery_rows": 0,
+    "github_delivery_log_entries": 0
+  },
+  "harness_corrections_found_live": [
+    "edge_watchdog had no --context flag, so it could only police the production context; a probe context could not be qualified without repointing production",
+    "cmd_watch returned a hardcoded primary_stale=false on window expiry, hiding the last observed state"
+  ],
+  "teardown": {
+    "probe_pr_closed_without_merge": 27,
+    "ruleset_deleted": 21513186,
+    "rulesets_remaining": 0,
+    "target_ref_deleted": true,
+    "check_run_preserved": 98026540146,
+    "main_head": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08"
+  }
+}

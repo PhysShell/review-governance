@@ -1,0 +1,12 @@
+{
+  "teardown_at": "2026-08-22T10:30:35Z",
+  "probe_pr_closed_without_merge": 25,
+  "probe_pr_merged_into_isolated_ref_only": {"pr": 26, "base": "refs/heads/governor/a5a-readiness-target"},
+  "ruleset_deleted": 21193128,
+  "rulesets_remaining": 0,
+  "readiness_ref_deleted": "refs/heads/governor/a5a-readiness-target",
+  "ref_readback_status": 404,
+  "main_head_after": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+  "main_branch_protection": "none (404 Branch not protected)",
+  "open_prs_on_main_unchanged": [{"pr": 12, "head": "e29621f54a63"}, {"pr": 8, "head": "6d81a4d62e14"}]
+}
