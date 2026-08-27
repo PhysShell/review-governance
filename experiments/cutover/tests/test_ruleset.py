@@ -202,3 +202,49 @@ def test_stop_after_disabled_halts_before_the_flip(monkeypatch):
         stop_after_disabled = True
 
     assert rs.run(Args())["verdict"] == "HALTED_BEFORE_ACTIVATION"
+
+
+# --- A5b-r2: the new field is protected, not decorative -----------------------
+
+def test_do_not_enforce_on_create_is_pinned_false():
+    params = cutover.canonical_ruleset()["rules"][0]["parameters"]
+    assert params["do_not_enforce_on_create"] is False
+
+
+@pytest.mark.parametrize("enforcement", ["disabled", "active"])
+def test_flipping_do_not_enforce_on_create_moves_both_hashes(enforcement):
+    """The field was added because it is policy-bearing — at True, branch
+    creation escapes the rule. If the hashes did not move with it, adding it
+    would have been decoration to make GitHub agree, which is the exact
+    substitution A5b-r2 refused."""
+    tampered = cutover.ruleset_with(enforcement)
+    tampered["rules"][0]["parameters"]["do_not_enforce_on_create"] = True
+
+    digests = cutover.hashes()
+    assert cutover.policy_hash(tampered) != digests["POLICY_HASH"]
+    expected_full = digests["DISABLED_RULESET_HASH" if enforcement == "disabled"
+                            else "ACTIVE_RULESET_HASH"]
+    assert cutover.canonical_hash(tampered) != expected_full
+
+
+def test_r2_hashes_are_the_reviewed_constants():
+    """Frozen in the A5b-r2 amendment. The A5a values are historical and are
+    not rewritten anywhere."""
+    assert cutover.hashes() == {
+        "POLICY_HASH":
+            "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+        "DISABLED_RULESET_HASH":
+            "3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7",
+        "ACTIVE_RULESET_HASH":
+            "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+    }
+
+
+def test_omitting_the_field_entirely_also_mismatches():
+    """The pre-r2 shape must no longer verify, or the amendment would be a
+    no-op that happens to agree with GitHub."""
+    old_shape = cutover.ruleset_with("disabled")
+    del old_shape["rules"][0]["parameters"]["do_not_enforce_on_create"]
+    assert cutover.canonical_hash(old_shape) != \
+        cutover.hashes()["DISABLED_RULESET_HASH"]
+    assert cutover.policy_hash(old_shape) != cutover.hashes()["POLICY_HASH"]

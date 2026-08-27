@@ -177,16 +177,17 @@ target         branch
 conditions     ref_name include [refs/heads/main], exclude []
 bypass_actors  []
 rules          required_status_checks
-                 context         ai/final-review
-                 integration_id  4669438
+                 context                               ai/final-review
+                 integration_id                        4669438
                  strict_required_status_checks_policy  true
+                 do_not_enforce_on_create              false   <- A5b-r2
 ```
 
 Independent readback, then compare:
 
 ```text
-POLICY_HASH            d6a4fa262d31c1f9fb95c5be631a52b7884febd65cec36194c5a9e303fedf5a7
-DISABLED_RULESET_HASH  b6ea30b64ae311ce348dcef0be6cf0de69872d74aa18496213fe7eb8e8fa474b
+POLICY_HASH            7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04
+DISABLED_RULESET_HASH  3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7
 ```
 
 Only then flip `disabled -> active`, and read back again:
@@ -194,8 +195,12 @@ Only then flip `disabled -> active`, and read back again:
 ```text
 POLICY_HASH            unchanged — the flip is a state transition,
                        not a policy change
-ACTIVE_RULESET_HASH    fd77f989384bc400967710aa5fa795418946b0b2a9022c9202e9d63a4506e813
+ACTIVE_RULESET_HASH    3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20
 ```
+
+These are the **A5b-r2** values. The A5a constants (`d6a4fa26…`,
+`b6ea30b6…`, `fd77f989…`) are historical and are not rewritten anywhere
+they were recorded; see the amendment below for why they moved.
 
 A mismatch at any readback stops the stage. `POLICY_HASH` changing across
 the flip would mean something edited the policy while the enforcement state
@@ -403,3 +408,114 @@ Both defects sat in the class this programme has now found five times: a
 value that would have been reported as evidence while actually resting on a
 coincidence of timing. Finding them in preregistration rather than in a
 report is the entire reason the preregistration step exists.
+
+## Amendment A5b-r2 — the canonical policy was incomplete
+
+```text
+DEFECT       canonical policy omitted a documented policy-bearing field,
+             required_status_checks.parameters.do_not_enforce_on_create
+OBSERVED     GitHub materialised it as false on the created ruleset
+DECISION     false becomes explicit reviewed policy
+CONSEQUENCE  all three canonical hashes intentionally change
+CLASS        POLICY_SPEC_INCOMPLETE
+```
+
+### What happened
+
+Step 4 created the ruleset disabled, read it back independently, and
+refused it. The readback carried a field the reviewed object had never
+named:
+
+```text
+expected  rules[0].parameters
+              required_status_checks
+              strict_required_status_checks_policy
+observed  rules[0].parameters
+              required_status_checks
+              strict_required_status_checks_policy
+              do_not_enforce_on_create = false
+```
+
+Activation never ran. A test asserts it cannot run on a failed
+verification, and the object was left `enforcement: disabled`, enforcing
+nothing.
+
+### Live witness, preserved rather than cleaned up
+
+```text
+ruleset_id            21599682
+enforcement           disabled
+observed POLICY_HASH  7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04
+observed FULL HASH    3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7
+expected (A5a)        d6a4fa26… / b6ea30b6…
+parameters keys       do_not_enforce_on_create,
+                      required_status_checks,
+                      strict_required_status_checks_policy
+```
+
+It stays in place, disabled, until this amendment is reviewed. It is the
+best evidence of the defect, and deleting the only artefact that
+demonstrates a specification gap in order to tidy up would be a poor trade.
+
+### Why the field is pinned rather than filtered
+
+`do_not_enforce_on_create` is not server metadata. At `true`, branch and
+repository creation is exempted from the rule even where the required check
+would otherwise forbid it — so it decides policy, and the canonical object
+being silent about it was a gap in what was reviewed, not noise from the
+API.
+
+Two alternatives were rejected:
+
+```text
+canon + a list of "known GitHub defaults"   REJECTED
+    policy semantics would then live in two places, and within a year
+    somebody adds a convenient field to the second one; the hash resumes
+    confirming something nobody reviewed
+ignore unknown or defaulted fields          REJECTED HARD
+    that is a denylist wearing an allowlist's name
+```
+
+Filtering would have been right for `id`, `node_id`, `source`, timestamps
+and `_links`, which say nothing about policy. `normalize()` already drops
+those, and does so by an explicit allowlist of the six policy-bearing keys
+so that a genuinely new policy field surfaces as a mismatch instead of
+being absorbed. That is exactly what happened here.
+
+### The new constants
+
+```text
+POLICY_HASH            7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04
+DISABLED_RULESET_HASH  3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7
+ACTIVE_RULESET_HASH    3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20
+```
+
+The first two are confirmed against the live readback. The third is a
+deterministically computed expectation and **not yet live evidence**,
+because activation correctly did not happen.
+
+The field is protected rather than decorative: a test asserts that flipping
+`do_not_enforce_on_create` to `true` moves both `POLICY_HASH` and the
+corresponding ruleset hash, and another asserts that the pre-r2 shape no
+longer verifies. Without those, adding the field would have been decoration
+to make GitHub agree — the substitution this amendment exists to refuse.
+
+### Resumption sequence, once r2 is approved
+
+```text
+1  delete disabled ruleset 21599682
+   -> independent readback: rulesets == []
+2  rerun step 3b
+   -> CLOSED: proceed
+   -> any delta: normal STOP path, no patching
+3  create the ruleset disabled again
+   -> 7e086ae8… / 3b907b82…
+4  flip to active
+   -> 7e086ae8… unchanged / 3f1ddeca…
+```
+
+Step 3b must be re-run rather than reused. The earlier closure was a
+correct observation, but after a stop and an amendment it is no longer
+*immediately before activation*, which is the only property that made it
+worth taking. If the PR set or a head moved in the meantime, r1 should
+trigger now rather than remain a well-written section of a document.
