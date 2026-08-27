@@ -1,0 +1,61 @@
+{
+  "step": "A5b step 3b pre-activation closure",
+  "repo": "PhysShell/evm-from-scratch",
+  "base": "main",
+  "frozen_inventory_hash": "93dd8e5b91bc81a0ce769df70078808265e276290e1692f65fc55f815d8edceb",
+  "frozen_inventory_file": "experiments/cutover/inventory/frozen-2026-08-26.json",
+  "observed_at": "2026-08-27T09:38:45Z",
+  "observation_finished_at": "2026-08-27T09:38:48Z",
+  "frozen_count": 2,
+  "current_count": 2,
+  "current_inventory": [
+    {
+      "repo": "PhysShell/evm-from-scratch",
+      "base": "main",
+      "pr_number": 8,
+      "head_sha": "8aeafa9c28b9679c6fec660101f37e1f8bd994bd",
+      "head_ref": "claude/p-038-evm-from-scratch-0l73bd",
+      "draft": false,
+      "title": "E1-v5 closes as history \u2014 STOP_PROTOCOL_POSTFREEZE_CHAIN_NONCONFORMANT"
+    },
+    {
+      "repo": "PhysShell/evm-from-scratch",
+      "base": "main",
+      "pr_number": 12,
+      "head_sha": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+      "head_ref": "claude/ai-final-review-governor-pilot-vohn85",
+      "draft": true,
+      "title": "ai-final-review shadow governor \u2014 non-enforcing pilot, measured provider contracts"
+    }
+  ],
+  "carrier_states": [
+    {
+      "pr_number": 8,
+      "head_sha": "8aeafa9c28b9679c6fec660101f37e1f8bd994bd",
+      "carriers_found": [
+        98235786270
+      ],
+      "matching": [
+        98235786270
+      ],
+      "state": "CONFIRMED",
+      "check_run_id": 98235786270
+    },
+    {
+      "pr_number": 12,
+      "head_sha": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+      "carriers_found": [
+        98235792852
+      ],
+      "matching": [
+        98235792852
+      ],
+      "state": "CONFIRMED",
+      "check_run_id": 98235792852
+    }
+  ],
+  "deltas": [],
+  "preactivation_current_inventory_closed": true,
+  "verdict": "CLOSED",
+  "scope_note": "This is a closure observation at a point in time, not a lock. A PR appearing after this read carries no check and fails closed; claiming otherwise would reassert G2."
+}

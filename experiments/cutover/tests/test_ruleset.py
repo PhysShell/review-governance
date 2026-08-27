@@ -257,3 +257,73 @@ def test_create_records_what_it_asserted(monkeypatch):
     params = r["request_body"]["rules"][0]["parameters"]
     assert params["do_not_enforce_on_create"] is False
     assert r["request_body"]["enforcement"] == "disabled"
+
+
+# --- activation: the PUT is never the verdict ---------------------------------
+
+def _activate(monkeypatch, before, after, flip_ok=True, named=None):
+    calls = {"put": 0}
+    monkeypatch.setattr(rs, "find_by_name",
+                        lambda repo, name: (named if named is not None
+                                            else [{"id": 42}], None))
+    verdicts = iter([before, after])
+    monkeypatch.setattr(rs, "verify", lambda repo, rid, enf: next(verdicts))
+
+    def fake_activate(repo, rid):
+        calls["put"] += 1
+        return {"flip_ok": flip_ok}
+
+    monkeypatch.setattr(rs, "activate", fake_activate)
+    return rs.activate_existing(REPO, 42), calls
+
+
+def _v(state="VERIFIED", enforcement="disabled", policy="p"):
+    return {"state": state, "observed_enforcement": enforcement,
+            "POLICY_HASH": {"observed": policy}}
+
+
+def test_activation_confirmed_only_by_readback(monkeypatch):
+    r, calls = _activate(monkeypatch, _v(), _v(enforcement="active"))
+    assert r["state"] == "CONFIRMED"
+    assert r["policy_hash_unchanged_across_flip"] is True
+    assert calls["put"] == 1
+
+
+def test_lost_put_response_does_not_stop_a_successful_flip(monkeypatch):
+    """The response is not consulted; the readback decides."""
+    r, calls = _activate(monkeypatch, _v(), _v(enforcement="active"),
+                         flip_ok=False)
+    assert r["state"] == "CONFIRMED"
+    assert calls["put"] == 1
+
+
+def test_readback_still_disabled_is_did_not_establish(monkeypatch):
+    r, calls = _activate(monkeypatch, _v(), _v(enforcement="disabled"))
+    assert r["state"] == "DID_NOT_ESTABLISH"
+    assert calls["put"] == 1, "and no second PUT"
+
+
+def test_unreadable_after_flip_is_outcome_unknown(monkeypatch):
+    r, calls = _activate(monkeypatch, _v(), {"state": "UNCERTAIN"})
+    assert r["state"] == "OUTCOME_UNKNOWN"
+    assert "No second mutation" in r["cause"]
+    assert r["retry_performed"] is False
+
+
+def test_policy_hash_moving_across_the_flip_stops(monkeypatch):
+    r, _ = _activate(monkeypatch, _v(policy="before"),
+                     _v(enforcement="active", policy="after"))
+    assert r["state"] == "STOP"
+    assert "POLICY_HASH moved" in r["cause"]
+
+
+def test_refuses_to_flip_an_unverified_disabled_object(monkeypatch):
+    r, calls = _activate(monkeypatch, _v(state="MISMATCH"), _v())
+    assert r["state"] == "STOP"
+    assert calls["put"] == 0
+
+
+def test_refuses_when_the_named_set_is_not_exactly_this_one(monkeypatch):
+    r, calls = _activate(monkeypatch, _v(), _v(), named=[{"id": 42}, {"id": 43}])
+    assert r["state"] == "STOP"
+    assert calls["put"] == 0

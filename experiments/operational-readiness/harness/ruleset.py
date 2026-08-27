@@ -178,6 +178,65 @@ def activate(repo, ruleset_id):
             "flip_response": (response if not ok else "not trusted")}
 
 
+def activate_existing(repo, ruleset_id):
+    """Flip one existing ruleset, and establish the outcome by reading.
+
+    The PUT response is not consulted for the verdict, and a lost or
+    garbled one is never cured by a second PUT. Building an entire
+    architecture on "write is not fact" and then trusting an HTTP client at
+    the one flip that closes production would be almost artistic.
+    """
+    name = cutover.canonical_ruleset()["name"]
+    named, error = find_by_name(repo, name)
+    if named is None:
+        return {"state": "STOP", "cause": "cannot list rulesets", "error": error}
+    if len(named) != 1 or named[0]["id"] != ruleset_id:
+        return {"state": "STOP",
+                "cause": f"expected exactly one ruleset named {name!r} with id "
+                         f"{ruleset_id}; found {[r['id'] for r in named]}"}
+
+    before = verify(repo, ruleset_id, "disabled")
+    if before["state"] != "VERIFIED" or before["observed_enforcement"] != "disabled":
+        return {"state": "STOP", "cause": "pre-flip state is not a verified "
+                                          "disabled ruleset", "before": before}
+    pre_flip_policy_hash = before["POLICY_HASH"]["observed"]
+
+    flip = activate(repo, ruleset_id)
+    after = verify(repo, ruleset_id, "active")
+
+    result = {"ruleset_id": ruleset_id, "flip": flip,
+              "pre_flip_policy_hash": pre_flip_policy_hash,
+              "before": before, "after": after,
+              "retry_performed": False}
+
+    if after["state"] == "UNCERTAIN":
+        result["state"] = "OUTCOME_UNKNOWN"
+        result["cause"] = ("readback unavailable; the flip may or may not "
+                           "have landed. No second mutation until state is "
+                           "established by reads.")
+        return result
+    if after["observed_enforcement"] == "disabled":
+        result["state"] = "DID_NOT_ESTABLISH"
+        result["cause"] = "readback still reports disabled; activation did " \
+                          "not take effect"
+        return result
+    if after["state"] != "VERIFIED":
+        result["state"] = "OUTCOME_UNKNOWN"
+        result["cause"] = "readback is neither the verified active object " \
+                          "nor the disabled one"
+        return result
+
+    result["policy_hash_unchanged_across_flip"] = (
+        pre_flip_policy_hash == after["POLICY_HASH"]["observed"])
+    result["state"] = ("CONFIRMED" if result["policy_hash_unchanged_across_flip"]
+                       else "STOP")
+    if result["state"] == "STOP":
+        result["cause"] = ("POLICY_HASH moved across the flip; something "
+                           "edited the policy while the enforcement state "
+                           "changed")
+    return result
+
+
 def run(args):
     repo = args.repo
     name = cutover.canonical_ruleset()["name"]
@@ -221,15 +280,24 @@ def main():
     ap.add_argument("--repo", default=cutover.REPO)
     ap.add_argument("--stop-after-disabled", action="store_true",
                     help="create and verify, then halt before the flip")
+    ap.add_argument("--activate-existing", type=int, default=None,
+                    metavar="RULESET_ID",
+                    help="flip an existing verified-disabled ruleset. Creates "
+                         "nothing.")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
-    result = run(args)
+    if args.activate_existing:
+        result = activate_existing(args.repo, args.activate_existing)
+        ok_states = ("CONFIRMED",)
+    else:
+        result = run(args)
+        ok_states = ("ACTIVE", "HALTED_BEFORE_ACTIVATION")
     rendered = json.dumps(result, indent=2, default=str)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(rendered + "\n")
     print(rendered)
-    return 0 if result.get("verdict") in ("ACTIVE", "HALTED_BEFORE_ACTIVATION") else 1
+    return 0 if result.get("verdict", result.get("state")) in ok_states else 1
 
 
 if __name__ == "__main__":
