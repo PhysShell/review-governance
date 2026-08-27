@@ -155,6 +155,13 @@ def create_disabled(repo, name):
     if len(after) == 1:
         return {"state": "CREATED", "attempted_at": attempted_at,
                 "ruleset_id": after[0]["id"], "create_ok": ok,
+                # The body is evidence, not debug output. A5b-r2 recreated
+                # this object specifically so that
+                # do_not_enforce_on_create=false would be an assertion of
+                # the reviewed specification rather than a GitHub default
+                # that happened to agree. That claim is only checkable if
+                # what was asserted is recorded.
+                "request_body": body,
                 "create_response": (response if not ok else "not trusted")}
     return {"state": "UNCERTAIN", "attempted_at": attempted_at,
             "cause": f"{len(after)} rulesets named {name!r} after one POST; "

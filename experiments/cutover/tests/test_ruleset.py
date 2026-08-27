@@ -248,3 +248,12 @@ def test_omitting_the_field_entirely_also_mismatches():
     assert cutover.canonical_hash(old_shape) != \
         cutover.hashes()["DISABLED_RULESET_HASH"]
     assert cutover.policy_hash(old_shape) != cutover.hashes()["POLICY_HASH"]
+
+
+def test_create_records_what_it_asserted(monkeypatch):
+    """The provenance argument for recreating the ruleset is only checkable
+    if the asserted body is kept."""
+    r, _ = _create(monkeypatch, before=[], after=[{"id": 42}])
+    params = r["request_body"]["rules"][0]["parameters"]
+    assert params["do_not_enforce_on_create"] is False
+    assert r["request_body"]["enforcement"] == "disabled"
