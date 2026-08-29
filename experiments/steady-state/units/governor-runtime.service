@@ -1,0 +1,22 @@
+[Unit]
+Description=Governor production steady-state runtime (scoped epochs, carrier lifecycle)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nixos/Documents/repos/review-governance/experiments/steady-state/harness
+Environment=GOVERNOR_CONFIG_DIR=%h/.config/review-governor
+# Replaces governor-reconcile.service, which ran the A5a harness against the
+# legacy decisions store and filtered epochs on an "a5a-" prefix left over
+# from fixtures. That module is historical evidence and is not edited; it
+# simply stops being an entrypoint.
+ExecStart=/run/current-system/sw/bin/nix develop /home/nixos/Documents/repos/review-governance --command python3 runtime.py \
+  --repo PhysShell/evm-from-scratch --base main \
+  --db %h/.config/review-governor/production.sqlite3 \
+  --interval 30 --window 0
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

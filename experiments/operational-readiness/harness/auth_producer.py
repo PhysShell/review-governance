@@ -408,7 +408,19 @@ def main():
         # nothing: a projection that only updates on change goes stale
         # silently and then disagrees with the store nobody is reading.
         result["projection"] = store.project(args.projection)
-        result["permits_triggers"] = store.permits_triggers()
+        # The derived permission, not a boolean: an operator reading this
+        # output must be able to see how old the observation is.
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]
+                               / "steady-state" / "harness"))
+        import auth_policy
+        permission = auth_policy.evaluate(store)
+        result["permission"] = {
+            "state": permission.state,
+            "age_seconds": permission.age_seconds,
+            "auth_generation": permission.auth_generation,
+            "observed_at": permission.observed_at,
+            "permits_action": permission.permits_action,
+        }
         result["demands_invalidation"] = store.demands_invalidation()
     finally:
         store.close()

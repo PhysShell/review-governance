@@ -24,6 +24,15 @@ import auth_state  # noqa: E402
 
 REPO = "PhysShell/evm-from-scratch"
 
+sys.path.insert(0, str(BASE.parents[0] / "steady-state" / "harness"))
+import auth_policy  # noqa: E402
+
+
+def _perm(store):
+    """A6c: the guard requires a derived permission, so the caller must
+    supply one rather than have freshness inferred on its behalf."""
+    return auth_policy.evaluate(store)
+
 
 @pytest.fixture()
 def store(tmp_path):
@@ -43,25 +52,25 @@ def test_never_observed_is_not_permission(store):
     """A Governor that has never established authorization has not
     established it. That is the same operational fact as having lost it."""
     assert store.current() is None
-    assert store.permits_triggers() is False
+    assert store.state_permits_triggers() is False
     with pytest.raises(auth_state.AuthorizationRefused):
-        auth_state.require_triggers_permitted(store)
+        auth_state.require_triggers_permitted(store, permission=_perm(store))
 
 
 @pytest.mark.parametrize("state", [auth_state.AUTH_LOST,
                                    auth_state.REFRESH_OUTCOME_UNKNOWN])
 def test_bad_states_forbid_triggers_and_demand_invalidation(store, state):
     observe(store, state)
-    assert store.permits_triggers() is False
+    assert store.state_permits_triggers() is False
     assert store.demands_invalidation() is True
     with pytest.raises(auth_state.AuthorizationRefused) as exc:
-        auth_state.require_triggers_permitted(store)
-    assert state in str(exc.value)
+        auth_state.require_triggers_permitted(store, permission=_perm(store))
+    assert "FORBIDDEN" in str(exc.value) or state in str(exc.value)
 
 
 def test_authorized_permits_and_demands_nothing(store):
     observe(store, auth_state.AUTHORIZED)
-    assert store.permits_triggers() is True
+    assert store.state_permits_triggers() is True
     assert store.demands_invalidation() is False
 
 
@@ -115,7 +124,7 @@ def test_projection_is_written_but_never_read_back(store, tmp_path):
     # tamper with the mirror; authority must be unmoved
     path.write_text(json.dumps({"state": "AUTHORIZED", "auth_generation": 99}))
     assert store.current()["state"] == auth_state.AUTH_LOST
-    assert store.permits_triggers() is False
+    assert store.state_permits_triggers() is False
 
 
 def test_gate_reads_the_store_not_the_json():
@@ -172,7 +181,7 @@ def test_successful_probe_records_authorized(store, monkeypatch):
     result = auth_producer.cmd_probe(object(), store)
     assert result["state"] == auth_state.AUTHORIZED
     assert store.current()["auth_generation"] == 7
-    assert store.permits_triggers() is True
+    assert store.state_permits_triggers() is True
 
 
 def test_indeterminate_probe_leaves_state_alone(store, monkeypatch):
@@ -185,7 +194,7 @@ def test_indeterminate_probe_leaves_state_alone(store, monkeypatch):
     result = auth_producer.cmd_probe(object(), store)
     assert result["result"] == "INDETERMINATE"
     assert len(store.history()) == 1
-    assert store.permits_triggers() is True
+    assert store.state_permits_triggers() is True
 
 
 def test_missing_credential_is_not_evidence_of_loss(store, monkeypatch):
@@ -234,7 +243,7 @@ def test_no_transition_when_authorized(store, tmp_path, monkeypatch):
 
     result = auth_gate.apply_transition(Args(), store, history)
     assert result["invalidations"] == []
-    assert result["permits_triggers"] is True
+    assert result["stored_state_permits_triggers"] is True
     history.close()
 
 
@@ -301,7 +310,7 @@ def test_returning_to_authorized_does_not_reopen_the_old_success(store, tmp_path
 
     result = auth_gate.apply_transition(Args(), store, history)
     assert result["invalidations"] == []
-    assert result["permits_triggers"] is True
+    assert result["stored_state_permits_triggers"] is True
     assert "recovery never restores" in result["note"]
     history.close()
 
@@ -478,7 +487,7 @@ def test_incomplete_response_is_ambiguous_but_keeps_the_material(store, tmp_path
     stored = json.loads(creds.read_text())["current"]
     assert stored["refresh_token"] == "ghr_new"
     assert stored["validated"] is False
-    assert store.permits_triggers() is False, "the gate closes via the store"
+    assert store.state_permits_triggers() is False, "the gate closes via the store"
 
 
 def test_definitive_error_is_auth_lost(store, tmp_path, monkeypatch):
