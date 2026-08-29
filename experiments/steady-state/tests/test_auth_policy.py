@@ -210,9 +210,12 @@ def test_stale_refuses_a_success_publication(store):
 
 
 def test_fresh_permits_the_success_guard(store):
+    """A6f added two more conditions: a success may only patch an existing
+    scoped run, and the runtime health must be fresh."""
     checked = publish.guard(reduction={"verdict": "SUCCESS", "head_sha": H},
                             bundle={"head_sha": H}, current_head_sha=H,
-                            permission=fresh(store))
+                            permission=fresh(store), existing_run=99104297860,
+                            health={"runtime": True, "reconciliation": True})
     assert checked["may_publish_success"] is True
 
 

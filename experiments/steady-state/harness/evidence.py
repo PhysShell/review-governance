@@ -41,11 +41,25 @@ def build_bundle(*, repo, pr_number, head_sha, lineage_records,
         "schema": SCHEMA_NAME,
         "repo": repo, "pr_number": pr_number, "head_sha": head_sha,
         "auth_generation": auth_generation,
+        # A bundle that stored only `qualified: true` committed to nothing:
+        # the mutable comment behind that boolean could change and the hash
+        # would not move. It now commits to the evidence itself, so a
+        # reader can re-derive the verdict instead of trusting it.
         "providers": sorted(
             [{"provider": r["provider"], "generation": r["generation"],
               "requested_for_head": r["requested_for_head"],
               "state": r["state"],
-              "qualified": bool((r.get("qualification") or {}).get("qualified"))}
+              "request_id": r.get("request_id"),
+              "request_carrier_id": r.get("request_carrier_id"),
+              "terminal_carrier_id": (r.get("terminal") or {}).get("carrier_id"),
+              "admissibility_state": (r.get("terminal") or {}).get("state"),
+              "predicate_schema": (r.get("predicate") or {}).get("schema_revision"),
+              "predicate_state": (r.get("predicate") or {}).get("state"),
+              "findings_count": (r.get("predicate") or {}).get("findings_count"),
+              "snapshot_digest": (r.get("predicate") or {}).get("snapshot_digest"),
+              "qualified": ((r.get("predicate") or {}).get("state")
+                            == "ADVISORY_POSITIVE"
+                            and bool((r.get("terminal") or {}).get("admissible")))}
              for r in lineage_records],
             key=lambda p: (p["provider"], p["generation"])),
         "frozen_at": frozen_at or utcnow(),
@@ -90,6 +104,20 @@ def reduce(bundle, *, current_head_sha, permission, auth_generation):
                    if not p["qualified"]]
     if unqualified:
         reasons.append(f"not qualified: {sorted(set(unqualified))}")
+    inadmissible = [p["provider"] for p in bundle.get("providers", [])
+                    if p.get("admissibility_state") not in (None, "ADMISSIBLE")]
+    if inadmissible:
+        reasons.append(f"evidence not admissible for: {sorted(set(inadmissible))}")
+    unsnapshotted = [p["provider"] for p in bundle.get("providers", [])
+                     if not p.get("snapshot_digest")]
+    if unsnapshotted:
+        reasons.append(
+            f"no frozen snapshot for {sorted(set(unsnapshotted))}; a bundle "
+            "that does not commit to the evidence commits to nothing")
+    with_findings = [p["provider"] for p in bundle.get("providers", [])
+                     if (p.get("findings_count") or 0) > 0]
+    if with_findings:
+        reasons.append(f"findings reported by {sorted(set(with_findings))}")
     wrong_head = [p["provider"] for p in bundle.get("providers", [])
                   if p["requested_for_head"] != current_head_sha]
     if wrong_head:

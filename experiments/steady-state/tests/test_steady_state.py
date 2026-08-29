@@ -390,6 +390,11 @@ def test_no_module_here_can_post_a_provider_request():
 # --- the reducer and the positive path ----------------------------------------
 
 def qualified_records(permission, head=H8):
+    """A6f shape: admissibility and a provider predicate, not the A6a
+    boolean. The old helper produced records whose `qualified` said nothing
+    about findings, which is precisely the defect A6f closed."""
+    import collector
+    import predicates
     out = []
     for provider in ("codex", "coderabbit"):
         r = lineage.request(repo=REPO, pr_number=8, provider=provider,
@@ -398,7 +403,15 @@ def qualified_records(permission, head=H8):
                             request_carrier_id=1)
         r = lineage.attest(r, carrier_id=2, carrier_head_claim=head,
                            carrier_updated_at="t", current_head=head)
-        out.append(lineage.qualify(r, current_head=head))
+        r = lineage.qualify(r, current_head=head)
+        r["request_id"] = "req-x"
+        r["request_carrier_id"] = 1
+        r["terminal"] = {"carrier_id": 2, "state": collector.ADMISSIBLE,
+                         "admissible": True}
+        r["predicate"] = predicates.evaluate(provider, {
+            "id": 2, "body": "no issues found", "review_ran": True,
+            "findings": [], "head_claim": head})
+        out.append(r)
     return out
 
 
@@ -417,15 +430,17 @@ def test_the_positive_path_exists_end_to_end(store, fresh):
 
     def request(method, path, body=None):
         if method == "GET":
-            return 200, {"conclusion": "success", "head_sha": H8,
-                         "app": {"id": 4669438}}
+            return 200, {"id": 77, "name": "ai/final-review",
+                         "app": {"id": 4669438}, "head_sha": H8,
+                         "external_id": e["epoch_id"], "conclusion": "success"}
         seen["method"] = method
-        return 201, {"id": 77}
+        return 200, {}
 
     r = publish.publish(request, repo=REPO, epoch_id=e["epoch_id"],
                         head_sha=H8, conclusion="success", bundle=bundle,
                         reduction=reduction, current_head_sha=H8,
-                        permission=fresh, store=store)
+                        permission=fresh, store=store, existing_run=77,
+                        health={"runtime": True})
     assert r["state"] == "CONFIRMED" and r["observed"] == "success"
     assert store.projection(e["epoch_id"])["state"] == "CONFIRMED"
 
@@ -520,7 +535,9 @@ def test_failure_needs_no_guard(store, fresh):
 
     def request(method, path, body=None):
         if method == "GET":
-            return 200, {"conclusion": "failure", "head_sha": H8}
+            return 200, {"id": 5, "name": "ai/final-review",
+                         "app": {"id": 4669438}, "head_sha": H8,
+                         "external_id": e["epoch_id"], "conclusion": "failure"}
         return 201, {"id": 5}
 
     r = publish.publish(request, repo=REPO, epoch_id=e["epoch_id"],

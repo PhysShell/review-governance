@@ -1,0 +1,36 @@
+{
+  "stage": "A6f live negative qualification",
+  "auth": {
+    "stored_state": "AUTHORIZED",
+    "generation": 5,
+    "derived": "STALE",
+    "age_seconds": 21830
+  },
+  "accept_attempt": {
+    "refused": true,
+    "before_durable_write": true,
+    "reason": "acceptance refused: authorization permission is STALE"
+  },
+  "acceptance_rows": 0,
+  "provider_request_rows": 0,
+  "preexisting_carrier_control": {
+    "comment_id": 5462558501,
+    "author": "coderabbitai[bot]",
+    "created_at": "2026-08-29T13:01:15Z",
+    "admissible": false,
+    "state": "PREEXISTING_NONREQUEST_CARRIER",
+    "refusals": [
+      "PREEXISTING_NONREQUEST_CARRIER"
+    ]
+  },
+  "preexisting_carrier_predicate": {
+    "state": "NOT_POSITIVE",
+    "reasons": [
+      "the carrier says the review was skipped",
+      "the review is not established as having run",
+      "no parsed actionable-comment count; 'Review completed' describes the run, not the findings"
+    ]
+  },
+  "provider_network_writes": 0,
+  "production_success_writes": 0
+}

@@ -40,7 +40,8 @@ def utcnow():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def guard(*, reduction, bundle, current_head_sha, permission):
+def guard(*, reduction, bundle, current_head_sha, permission, health=None,
+          existing_run=None):
     """Evaluated immediately before the write, never earlier.
 
     A guard checked at the start of a round and trusted at the end is a
@@ -60,6 +61,14 @@ def guard(*, reduction, bundle, current_head_sha, permission):
         refusals.append(
             f"authorization permission is {permission.state} "
             f"(age={permission.age_seconds}s): {permission.cause}")
+    if not existing_run:
+        refusals.append(
+            "no existing scoped failure run to patch; a success is a "
+            "transition of the carrier the gate already consults, never a "
+            "second carrier on the same head")
+    for name, fresh in sorted((health or {}).items()):
+        if not fresh:
+            refusals.append(f"{name} health is not fresh")
     return {"may_publish_success": not refusals, "refusals": refusals,
             "authorization": permission.as_dict()}
 
@@ -77,8 +86,16 @@ def summary_for(verdict, bundle):
 
 
 def publish(request, *, repo, epoch_id, head_sha, conclusion, bundle,
-            reduction, current_head_sha, permission, store, existing_run=None):
-    """Publish, then believe the readback rather than the write."""
+            reduction, current_head_sha, permission, store, existing_run=None,
+            health=None):
+    """Publish, then believe the readback rather than the write.
+
+    A success may only PATCH the existing scoped failure run. Creating a
+    second carrier on a head is forbidden here even though the API allows
+    it: the whole steady-state runtime is built around exactly one
+    applicable carrier, and an optional "or post a new one" path would
+    quietly undo that.
+    """
     if conclusion in FORBIDDEN:
         raise PublishRefused(
             f"{conclusion} can read as passing downstream and is excluded "
@@ -88,7 +105,8 @@ def publish(request, *, repo, epoch_id, head_sha, conclusion, bundle,
     if conclusion in PASSING:
         checked = guard(reduction=reduction, bundle=bundle,
                         current_head_sha=current_head_sha,
-                        permission=permission)
+                        permission=permission, health=health,
+                        existing_run=existing_run)
         if not checked["may_publish_success"]:
             raise PublishRefused(
                 "pre-publication guard refused: " + "; ".join(checked["refusals"]))
@@ -112,6 +130,9 @@ def publish(request, *, repo, epoch_id, head_sha, conclusion, bundle,
         write_status, _ = request(
             "PATCH", f"/repos/{repo}/check-runs/{existing_run}", body)
         run_id = existing_run
+    elif conclusion in PASSING:
+        raise PublishRefused(
+            "a passing conclusion may only patch an existing scoped run")
     else:
         write_status, created = request(
             "POST", f"/repos/{repo}/check-runs", body)
@@ -128,13 +149,23 @@ def publish(request, *, repo, epoch_id, head_sha, conclusion, bundle,
     read_status, readback = request(
         "GET", f"/repos/{repo}/check-runs/{run_id}", None)
     observed = (readback or {}).get("conclusion")
-    settled = ("CONFIRMED" if read_status == 200 and observed == conclusion
+    # The conclusion alone is not the identity of the thing that changed.
+    identity = {
+        "run_id": (readback or {}).get("id") == run_id,
+        "name": (readback or {}).get("name") == PRODUCTION_CONTEXT,
+        "app_id": ((readback or {}).get("app") or {}).get("id") == GOVERNOR_APP_ID,
+        "head_sha": (readback or {}).get("head_sha") == head_sha,
+        "external_id": (readback or {}).get("external_id") == epoch_id,
+        "conclusion": observed == conclusion,
+    }
+    settled = ("CONFIRMED" if read_status == 200 and all(identity.values())
                else "OUTCOME_UNKNOWN" if read_status != 200 else "FAILED")
     store.project(epoch_id=epoch_id, check_run_id=run_id, intended=conclusion,
                   observed=observed, state=settled, decision_id=decision_id,
                   at=utcnow())
     return {"state": settled, "check_run_id": run_id, "intended": conclusion,
-            "observed": observed, "write_status": write_status,
+            "observed": observed, "identity": identity,
+            "write_status": write_status,
             "decision_id": decision_id, "retry_performed": False,
             "app_id": ((readback or {}).get("app") or {}).get("id"),
             "head_sha": (readback or {}).get("head_sha")}
