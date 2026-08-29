@@ -1,0 +1,92 @@
+{
+  "step": "A6a live qualification",
+  "repo": "PhysShell/evm-from-scratch",
+  "started_at": "2026-08-29T12:15:43Z",
+  "pre_read": {
+    "pr_number": 8,
+    "head_observed": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "head_expected": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "head_unchanged": true,
+    "main_observed": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "main_expected": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "main_unchanged": true,
+    "ruleset_verified_active": true,
+    "ruleset_verification": {
+      "ruleset_id": 21640654,
+      "observed_enforcement": "active",
+      "POLICY_HASH": {
+        "observed": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+        "expected": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+        "match": true
+      },
+      "FULL_HASH": {
+        "observed": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+        "expected": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+        "which": "ACTIVE_RULESET_HASH",
+        "match": true
+      },
+      "state": "VERIFIED"
+    },
+    "carriers_on_head": [],
+    "carriers_absent": true,
+    "at": "2026-08-29T12:15:45Z",
+    "ready": true
+  },
+  "carrier": {
+    "state": "CONFIRMED",
+    "wrote": true,
+    "carrier": 99099324325,
+    "epoch_id": "pe-4f273e580b00f75366e8b30d",
+    "head_sha": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "post_status": 201,
+    "retry_performed": false
+  },
+  "independent_readback": {
+    "check_run_id": 99099324325,
+    "app_id": 4669438,
+    "head_sha": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "conclusion": "failure",
+    "title": "Governor: NOT_ESTABLISHED",
+    "exact_head_match": true,
+    "app_matches": true
+  },
+  "durable_epoch": {
+    "epoch_id": "pe-4f273e580b00f75366e8b30d",
+    "repo": "PhysShell/evm-from-scratch",
+    "pr_number": 8,
+    "head_sha": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "generation": 1,
+    "identifies_pr": true
+  },
+  "reconciliation": {
+    "repo": "PhysShell/evm-from-scratch",
+    "pr_number": 8,
+    "at": "2026-08-29T12:15:48Z",
+    "github_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "scope_state": "RESOLVED",
+    "source": "GitHub read; the edge delivery spool was not consulted",
+    "comparison_performed": true,
+    "stored_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "stored_repo": "PhysShell/evm-from-scratch",
+    "stored_pr_number": 8,
+    "stored_epoch_id": "pe-4f273e580b00f75366e8b30d",
+    "drift_detected": false,
+    "scope_proven_by": "the epoch row carries repo and pr_number as part of its identity, and both were matched",
+    "governor_runs_on_current_head": [
+      {
+        "id": 99099324325,
+        "conclusion": "failure"
+      }
+    ],
+    "current_head_is_unreviewed": false,
+    "finished_at": "2026-08-29T12:15:50Z"
+  },
+  "cross_pr_control": {
+    "pr_12_state": "RESOLVED",
+    "pr_12_head": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+    "pr_8_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "distinct": true
+  },
+  "verdict": "QUALIFIED",
+  "finished_at": "2026-08-29T12:15:50Z"
+}
