@@ -1,7 +1,7 @@
 {
   "artifact": "FirstGovernedReviewCandidate-v1",
   "repo": "PhysShell/evm-from-scratch",
-  "observed_at": "2026-08-29T11:16:01Z",
+  "observed_at": "2026-08-29T11:56:53Z",
   "gate": {
     "state": "VERIFIED_ACTIVE",
     "ruleset_id": 21640654,
@@ -83,5 +83,30 @@
     "history_rewritten": false
   },
   "provider_round": "NOT_STARTED",
-  "candidate_state": "READY_FOR_ACCEPT_CANDIDATE"
+  "candidate_state": "ESTABLISHED",
+  "runtime_readiness": {
+    "steady_state_carrier_producer": false,
+    "production_success_projection": false,
+    "provider_trigger_lineage": false,
+    "pr_scoped_decision_history": false,
+    "production_carrier_producers": [
+      "bootstrap.py"
+    ],
+    "note": "structural, and self-excluded: this module is the checker and must not count as a capability it is looking for",
+    "missing": [
+      "steady_state_carrier_producer",
+      "production_success_projection",
+      "provider_trigger_lineage",
+      "pr_scoped_decision_history"
+    ],
+    "complete": false
+  },
+  "accept_candidate": "HOLD",
+  "cause": "PRODUCTION_RUNTIME_INCOMPLETE",
+  "missing_capabilities": [
+    "steady_state_carrier_producer",
+    "production_success_projection",
+    "provider_trigger_lineage",
+    "pr_scoped_decision_history"
+  ]
 }

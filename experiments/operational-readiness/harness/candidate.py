@@ -116,6 +116,81 @@ def ancestry(repo, pre_update_head, head_sha, main_sha):
     }
 
 
+def _writes(source, method, path_fragment):
+    """A real call site, not a word that happens to appear in the file.
+
+    The first version of this check matched its own search literals and
+    reported that every capability existed — including a provider trigger,
+    inside the module written to prove there is none. Substring matching
+    over source is how an instrument becomes a mirror.
+    """
+    import re
+    pattern = re.compile(r'\(\s*"%s"\s*,\s*f?"[^"]*%s' % (method, re.escape(path_fragment)))
+    return bool(pattern.search(source))
+
+
+def runtime_readiness(harness_dir, exclude=("candidate.py",)):
+    """Can the production runtime carry a review round to its end?
+
+    Structural checks, deliberately, because the honest question is not
+    "does the candidate look fine" but "does a path exist from a new head
+    to a published verdict". Establishing a candidate proves nothing about
+    the software above the gate.
+
+    Absence is what this establishes. A module that exists may still be
+    wrong, and this cannot say otherwise.
+    """
+    harness = Path(harness_dir)
+    sources = {p.name: p.read_text() for p in harness.glob("*.py")
+               if p.name not in exclude}
+
+    def posts_check_runs(text):
+        return _writes(text, "POST", "/check-runs")
+
+    def uses_production_context(text):
+        return 'PRODUCTION_CONTEXT = "ai/final-review"' in text
+
+    # A steady-state producer creates a carrier for an arbitrary current
+    # head. bootstrap.py posts the production context but only from a
+    # frozen inventory artifact — a one-shot cutover instrument by design.
+    producers = {n: t for n, t in sources.items()
+                 if posts_check_runs(t) and uses_production_context(t)}
+    steady_state = [n for n, t in producers.items()
+                    if "--inventory" not in t]
+
+    # A production success projection must be able to write a passing
+    # conclusion in the production context. governor.py can publish success
+    # but is hardcoded to the probe context.
+    success_paths = [n for n, t in sources.items()
+                     if uses_production_context(t) and posts_check_runs(t)
+                     and 'ONLY_CONCLUSION = "failure"' not in t]
+
+    triggers = [n for n, t in sources.items()
+                if _writes(t, "POST", "/issues/")
+                or _writes(t, "POST", "/comments")]
+
+    import decisions as dec
+    pr_scoped = "pr_number" in dec.SCHEMA and "repo" in dec.SCHEMA
+
+    checks = {
+        "steady_state_carrier_producer": bool(steady_state),
+        "production_success_projection": bool(success_paths),
+        "provider_trigger_lineage": bool(triggers),
+        "pr_scoped_decision_history": pr_scoped,
+        "production_carrier_producers": sorted(producers),
+        "note": "structural, and self-excluded: this module is the checker "
+                "and must not count as a capability it is looking for",
+    }
+    missing = [k for k in ("steady_state_carrier_producer",
+                           "production_success_projection",
+                           "provider_trigger_lineage",
+                           "pr_scoped_decision_history")
+               if not checks[k]]
+    checks["missing"] = missing
+    checks["complete"] = not missing
+    return checks
+
+
 def eligible(item):
     """Named conditions, evaluated per PR. Order is never one of them."""
     reasons = []
@@ -147,7 +222,7 @@ def select(inventory):
 
 
 def build(repo, expected_pr, token, inventory, gate, pre_update_head=None,
-          main_sha=None, method=None):
+          main_sha=None, method=None, runtime=None):
     """Assemble the artifact. Binding is always to a full head SHA."""
     chosen = select(inventory)
     artifact = {
@@ -183,7 +258,17 @@ def build(repo, expected_pr, token, inventory, gate, pre_update_head=None,
             "rebase_used": False, "force_push_used": False,
             **ancestry(repo, pre_update_head, head, main_sha)}
     artifact["provider_round"] = "NOT_STARTED"
-    artifact["candidate_state"] = "READY_FOR_ACCEPT_CANDIDATE"
+    artifact["candidate_state"] = "ESTABLISHED"
+    artifact["runtime_readiness"] = runtime
+    if runtime is not None and not runtime["complete"]:
+        # Establishing a candidate says nothing about whether the software
+        # above the gate can finish a round. Naming it READY would promise
+        # a transition that has no implementation.
+        artifact["accept_candidate"] = "HOLD"
+        artifact["cause"] = "PRODUCTION_RUNTIME_INCOMPLETE"
+        artifact["missing_capabilities"] = runtime["missing"]
+    else:
+        artifact["accept_candidate"] = "READY_FOR_ACCEPT_CANDIDATE"
     return artifact
 
 
@@ -214,13 +299,14 @@ def main():
         result = build(args.repo, args.expect_pr, token,
                        inv.enumerate_open(token, args.repo, "main"), gate,
                        pre_update_head=args.pre_update_head,
-                       main_sha=main_sha, method=args.method)
+                       main_sha=main_sha, method=args.method,
+                       runtime=runtime_readiness(Path(__file__).parent))
     rendered = json.dumps(result, indent=2, default=str)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(rendered + "\n")
     print(rendered)
-    return 0 if result["candidate_state"] == "READY_FOR_ACCEPT_CANDIDATE" else 1
+    return 0 if result.get("accept_candidate") == "READY_FOR_ACCEPT_CANDIDATE" else 1
 
 
 if __name__ == "__main__":

@@ -84,8 +84,10 @@ def test_a_stale_preselection_stops_rather_than_adapting(monkeypatch):
 def test_matching_preselection_proceeds(monkeypatch):
     monkeypatch.setattr(candidate, "carrier_for",
                         lambda r, h, t: {"state": "ABSENT"})
-    art = candidate.build(REPO, 8, "tok", [pr(8)], {"state": "VERIFIED_ACTIVE"})
-    assert art["candidate_state"] == "READY_FOR_ACCEPT_CANDIDATE"
+    art = candidate.build(REPO, 8, "tok", [pr(8)], {"state": "VERIFIED_ACTIVE"},
+                          runtime={"complete": True, "missing": []})
+    assert art["candidate_state"] == "ESTABLISHED"
+    assert art["accept_candidate"] == "READY_FOR_ACCEPT_CANDIDATE"
     assert art["pr_number"] == 8
 
 
@@ -140,16 +142,12 @@ def test_unreadable_carriers_never_become_absence(monkeypatch):
 
 def test_no_provider_trigger_code_exists_on_this_branch():
     """`provider_round: NOT_STARTED` is structural here, not merely current.
-    Nothing on this branch can post the comment that invokes a provider."""
-    harness = BASE / "harness"
-    offenders = []
-    for path in harness.glob("*.py"):
-        text = path.read_text().lower()
-        if "issues/" in text and "comments" in text:
-            offenders.append(path.name)
-        if "@coderabbitai" in text or "@codex" in text:
-            offenders.append(path.name)
-    assert offenders == [], offenders
+
+    Matched against call sites rather than words: the first version of this
+    test flagged the very module written to prove there is no trigger,
+    because that module names the endpoints it searches for."""
+    assert candidate.runtime_readiness(BASE / "harness")[
+        "provider_trigger_lineage"] is False
 
 
 def test_candidate_module_declares_the_round_not_started(monkeypatch):
@@ -160,15 +158,18 @@ def test_candidate_module_declares_the_round_not_started(monkeypatch):
 
 
 def test_candidate_module_is_read_only():
-    import ast
+    """Asserted by call shape, not by word.
+
+    The module must contain the strings "POST" and "/issues/" in order to
+    search for them, so a substring ban would forbid the checker from doing
+    its job. What matters is that no call *opens* with a write method and
+    that gh is never handed an explicit method flag."""
+    import re
     source = (BASE / "harness" / "candidate.py").read_text()
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
-            node.value.value = ""
-    code = ast.unparse(tree)
-    for forbidden in ("POST", "PATCH", "PUT", "DELETE"):
-        assert forbidden not in code, forbidden
+    assert '"-X"' not in source, "gh method flag present"
+    for method in ("POST", "PATCH", "PUT", "DELETE"):
+        opens_with = re.compile(r'\(\s*"%s"\s*,' % method)
+        assert not opens_with.search(source), method
 
 
 # --- the base update is re-derived, not transcribed ---------------------------
@@ -209,3 +210,73 @@ def test_merge_base_not_main_means_still_behind(monkeypatch):
     a = candidate.ancestry(REPO, OLD, NEW, "m" * 40)
     assert a["merge_base_is_main"] is False
     assert a["main_is_ancestor"] is False
+
+
+# --- the readiness checker must not find itself -------------------------------
+
+def test_readiness_check_excludes_itself():
+    """The first version matched its own search literals and reported that
+    every capability existed — including a provider trigger, inside the
+    module written to prove there is none. Substring matching over source
+    is how an instrument becomes a mirror."""
+    harness = BASE / "harness"
+    r = candidate.runtime_readiness(harness)
+    assert "candidate.py" not in r["production_carrier_producers"]
+    assert r["provider_trigger_lineage"] is False
+
+
+def test_readiness_matches_call_sites_not_words(tmp_path):
+    decoy = tmp_path / "decoy.py"
+    decoy.write_text('# mentions "POST" and "/issues/comments" and\n'
+                     '# PRODUCTION_CONTEXT = "ai/final-review" in prose only\n')
+    (tmp_path / "decisions.py").write_text('SCHEMA = ""\n')
+    r = candidate.runtime_readiness(tmp_path, exclude=())
+    assert r["provider_trigger_lineage"] is False
+    assert r["steady_state_carrier_producer"] is False
+
+
+def test_bootstrap_is_not_a_steady_state_producer():
+    """It posts the production context but only from a frozen inventory —
+    a one-shot cutover instrument, not a runtime."""
+    r = candidate.runtime_readiness(BASE / "harness")
+    assert "bootstrap.py" in r["production_carrier_producers"]
+    assert r["steady_state_carrier_producer"] is False
+
+
+def test_incomplete_runtime_holds_accept_candidate(monkeypatch):
+    monkeypatch.setattr(candidate, "carrier_for",
+                        lambda r, h, t: {"state": "ABSENT"})
+    art = candidate.build(REPO, 8, "tok", [pr(8)], {"state": "VERIFIED_ACTIVE"},
+                          runtime={"complete": False, "missing": ["x"]})
+    assert art["candidate_state"] == "ESTABLISHED"
+    assert art["accept_candidate"] == "HOLD"
+    assert art["cause"] == "PRODUCTION_RUNTIME_INCOMPLETE"
+
+
+# --- the naive reconcile fix would be worse than the bug ----------------------
+
+def test_naive_epoch_prefix_fix_would_return_another_prs_head():
+    """Documents why swapping the a5a- filter for bootstrap- must not be
+    the fix. `decisions` carries no repo or pr_number, so the predicate
+    cannot be PR-scoped at all: reversed history returns the most recent
+    bootstrap epoch of ANY PR. Inert becomes actively wrong — phantom
+    drift on a branch that never moved."""
+    import decisions as dec
+    assert "pr_number" not in dec.SCHEMA
+    assert '"repo"' not in dec.SCHEMA
+
+    history = [{"epoch_id": "bootstrap-8aeafa9c28b9", "head_sha": "8" * 40},
+               {"epoch_id": "bootstrap-e29621f54a63", "head_sha": "e" * 40}]
+    naive = next((r["head_sha"] for r in reversed(history)
+                  if r["epoch_id"].startswith("bootstrap-")), None)
+    assert naive == "e" * 40, "asked about PR #8, answered with PR #12"
+
+
+def test_last_known_head_ignores_the_pr_it_claims_to_scope():
+    """The docstring says 'for this PR'; the body never reads `pr`. A claim
+    of scoping that the code does not implement."""
+    import inspect
+    import reconcile
+    source = inspect.getsource(reconcile.last_known_head)
+    body = source.split('"""')[2]
+    assert "pr" not in body.replace("epoch_id", "").replace("startswith", "")
