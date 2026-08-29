@@ -16,6 +16,8 @@ fires in this stage.
 import datetime
 import json
 
+import auth_policy
+
 ACCEPTED = "ACCEPTED"
 REFUSED = "REFUSED"
 INVALIDATED = "INVALIDATED"
@@ -26,7 +28,7 @@ def utcnow():
 
 
 def preconditions(*, repo, pr_number, head_sha, draft, base_current,
-                  ruleset_verified, carrier, authorized, open_generations):
+                  ruleset_verified, carrier, permission, open_generations):
     """Every condition named, every failure named separately.
 
     Reported as a list rather than a boolean because "not eligible" is not
@@ -48,8 +50,11 @@ def preconditions(*, repo, pr_number, head_sha, draft, base_current,
             f"(state={(carrier or {}).get('state')})")
     elif carrier.get("head_sha") != head_sha:
         failures.append("the carrier is bound to a different head")
-    if not authorized:
-        failures.append("user authorization does not permit provider triggers")
+    permission = auth_policy.require(permission)
+    if not permission.permits_action:
+        failures.append(
+            f"authorization permission is {permission.state} "
+            f"(age={permission.age_seconds}s): {permission.cause}")
     incompatible = [g for g in (open_generations or [])
                     if g.get("head_sha") != head_sha]
     if incompatible:
@@ -68,8 +73,10 @@ def accept(*, repo, pr_number, head_sha, **checks):
                 "at": utcnow(),
                 "note": "a refusal is never repaired by relaxing a condition "
                         "in the same run"}
+    permission = checks["permission"]
     return {"state": ACCEPTED, "repo": repo, "pr_number": pr_number,
             "head_sha": head_sha, "accepted_at": utcnow(),
+            "authorization": permission.as_dict(),
             "provider_round": "NOT_STARTED",
             "note": "acceptance authorises a provider round for THIS commit "
                     "only"}

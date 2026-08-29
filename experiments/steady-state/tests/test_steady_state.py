@@ -15,8 +15,11 @@ import pytest
 
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE / "harness"))
+sys.path.insert(0, str(HERE.parents[0] / "operational-readiness" / "harness"))
 
 import accept  # noqa: E402
+import auth_policy as ap  # noqa: E402
+import auth_state  # noqa: E402
 import carrier  # noqa: E402
 import epochs as ep  # noqa: E402
 import evidence  # noqa: E402
@@ -36,6 +39,28 @@ def store(tmp_path):
     s = ep.EpochStore(tmp_path / "prod.sqlite3")
     yield s
     s.close()
+
+
+@pytest.fixture()
+def fresh(tmp_path):
+    """A permission that carries its provenance, as every critical
+    interface now requires."""
+    a = auth_state.AuthStore(tmp_path / "auth.sqlite3")
+    a.record(state="AUTHORIZED", auth_generation=4,
+             observed_at=ap.datetime.datetime.now(
+                 ap.datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+             source="device_flow")
+    yield ap.evaluate(a)
+    a.close()
+
+
+def stale_permission(tmp_path, name="stale.sqlite3"):
+    a = auth_state.AuthStore(tmp_path / name)
+    a.record(state="AUTHORIZED", auth_generation=4,
+             observed_at="2020-01-01T00:00:00Z", source="device_flow")
+    p = ap.evaluate(a)
+    a.close()
+    return p
 
 
 # --- scope is identity ---------------------------------------------------------
@@ -272,16 +297,16 @@ def test_carrier_producer_cannot_publish_anything_else(body):
 
 # --- ACCEPT-CANDIDATE ----------------------------------------------------------
 
-def ok_checks(**over):
+def ok_checks(permission, **over):
     base = {"draft": False, "base_current": True, "ruleset_verified": True,
             "carrier": {"state": "CONFIRMED", "head_sha": H8},
-            "authorized": True, "open_generations": []}
+            "permission": permission, "open_generations": []}
     base.update(over)
     return base
 
 
-def test_acceptance_requires_every_condition():
-    r = accept.accept(repo=REPO, pr_number=8, head_sha=H8, **ok_checks())
+def test_acceptance_requires_every_condition(fresh):
+    r = accept.accept(repo=REPO, pr_number=8, head_sha=H8, **ok_checks(fresh))
     assert r["state"] == accept.ACCEPTED
     assert r["provider_round"] == "NOT_STARTED"
 
@@ -290,20 +315,21 @@ def test_acceptance_requires_every_condition():
     ({"draft": True}, "draft"),
     ({"base_current": False}, "not current with its intended base"),
     ({"ruleset_verified": False}, "ruleset is not verified"),
-    ({"authorized": False}, "authorization"),
+
     ({"carrier": {"state": "ABSENT"}}, "no CONFIRMED failure carrier"),
     ({"carrier": {"state": "CONFIRMED", "head_sha": H8_OLD}},
      "bound to a different head"),
     ({"open_generations": [{"head_sha": H8_OLD}]}, "open generation"),
 ])
-def test_each_precondition_refuses_separately(override, fragment):
-    r = accept.accept(repo=REPO, pr_number=8, head_sha=H8, **ok_checks(**override))
+def test_each_precondition_refuses_separately(override, fragment, fresh):
+    r = accept.accept(repo=REPO, pr_number=8, head_sha=H8,
+                      **ok_checks(fresh, **override))
     assert r["state"] == accept.REFUSED
     assert any(fragment in f for f in r["failures"]), r["failures"]
 
 
-def test_head_move_invalidates_and_never_repoints():
-    a = accept.accept(repo=REPO, pr_number=8, head_sha=H8, **ok_checks())
+def test_head_move_invalidates_and_never_repoints(fresh):
+    a = accept.accept(repo=REPO, pr_number=8, head_sha=H8, **ok_checks(fresh))
     v = accept.still_valid(a, current_head_sha="f" * 40)
     assert v["valid"] is False and v["state"] == accept.INVALIDATED
     assert "not a re-pointing" in v["required_action"]
@@ -318,23 +344,23 @@ def test_no_function_repoints_an_acceptance():
 
 # --- provider lineage ----------------------------------------------------------
 
-def test_a_request_must_name_the_head_it_is_about():
+def test_a_request_must_name_the_head_it_is_about(fresh):
     with pytest.raises(lineage.LineageError):
         lineage.request(repo=REPO, pr_number=8, provider="codex",
                         requested_for_head="2d834870", generation=1,
-                        accepted_at="t")
+                        accepted_at="t", permission=fresh)
 
 
-def test_a_lost_request_response_is_outcome_unknown():
+def test_a_lost_request_response_is_outcome_unknown(fresh):
     r = lineage.request(repo=REPO, pr_number=8, provider="codex",
-                        requested_for_head=H8, generation=1, accepted_at="t")
+                        requested_for_head=H8, generation=1, accepted_at="t", permission=fresh)
     assert r["state"] == lineage.OUTCOME_UNKNOWN
 
 
-def test_attestation_and_binding_stay_separate():
+def test_attestation_and_binding_stay_separate(fresh):
     """A1b-c3: a comment mentioning a SHA has not been bound to it."""
     r = lineage.request(repo=REPO, pr_number=8, provider="codex",
-                        requested_for_head=H8, generation=1, accepted_at="t",
+                        requested_for_head=H8, generation=1, accepted_at="t", permission=fresh,
                         request_carrier_id=5)
     r = lineage.attest(r, carrier_id=9, carrier_head_claim=H8,
                        carrier_updated_at="t", current_head=H8)
@@ -342,10 +368,10 @@ def test_attestation_and_binding_stay_separate():
     assert r["attestation"]["AUTHORITATIVE_HEAD_BINDING"] is False
 
 
-def test_evidence_for_an_old_head_does_not_qualify():
+def test_evidence_for_an_old_head_does_not_qualify(fresh):
     r = lineage.request(repo=REPO, pr_number=8, provider="codex",
                         requested_for_head=H8_OLD, generation=1,
-                        accepted_at="t", request_carrier_id=5)
+                        accepted_at="t", permission=fresh, request_carrier_id=5)
     r = lineage.attest(r, carrier_id=9, carrier_head_claim=H8_OLD,
                        carrier_updated_at="t", current_head=H8)
     r = lineage.qualify(r, current_head=H8)
@@ -363,25 +389,26 @@ def test_no_module_here_can_post_a_provider_request():
 
 # --- the reducer and the positive path ----------------------------------------
 
-def qualified_records(head=H8):
+def qualified_records(permission, head=H8):
     out = []
     for provider in ("codex", "coderabbit"):
         r = lineage.request(repo=REPO, pr_number=8, provider=provider,
                             requested_for_head=head, generation=1,
-                            accepted_at="t", request_carrier_id=1)
+                            accepted_at="t", permission=permission,
+                            request_carrier_id=1)
         r = lineage.attest(r, carrier_id=2, carrier_head_claim=head,
                            carrier_updated_at="t", current_head=head)
         out.append(lineage.qualify(r, current_head=head))
     return out
 
 
-def test_the_positive_path_exists_end_to_end(store):
+def test_the_positive_path_exists_end_to_end(store, fresh):
     """The whole point of A6a: a success must be reachable before a review
     begins, or the system starts work it cannot finish."""
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
-                                   lineage_records=qualified_records(),
+                                   lineage_records=qualified_records(fresh),
                                    auth_generation=4)
-    reduction = evidence.reduce(bundle, current_head_sha=H8, authorized=True,
+    reduction = evidence.reduce(bundle, current_head_sha=H8, permission=fresh,
                                 auth_generation=4)
     assert reduction["verdict"] == evidence.SUCCESS
 
@@ -398,43 +425,56 @@ def test_the_positive_path_exists_end_to_end(store):
     r = publish.publish(request, repo=REPO, epoch_id=e["epoch_id"],
                         head_sha=H8, conclusion="success", bundle=bundle,
                         reduction=reduction, current_head_sha=H8,
-                        authorized=True, store=store)
+                        permission=fresh, store=store)
     assert r["state"] == "CONFIRMED" and r["observed"] == "success"
     assert store.projection(e["epoch_id"])["state"] == "CONFIRMED"
 
 
 @pytest.mark.parametrize("kwargs,fragment", [
     ({"current_head_sha": "f" * 40}, "no longer current"),
-    ({"authorized": False}, "authorization"),
     ({"auth_generation": 5}, "auth generation"),
 ])
-def test_stale_or_unauthorized_cannot_reduce_to_success(kwargs, fragment):
+def test_stale_or_unauthorized_cannot_reduce_to_success(kwargs, fragment,
+                                                        fresh):
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
-                                   lineage_records=qualified_records(),
+                                   lineage_records=qualified_records(fresh),
                                    auth_generation=4)
-    base = {"current_head_sha": H8, "authorized": True, "auth_generation": 4}
+    base = {"current_head_sha": H8, "permission": fresh, "auth_generation": 4}
     base.update(kwargs)
     reduction = evidence.reduce(bundle, **base)
     assert reduction["verdict"] == evidence.NOT_ESTABLISHED
     assert any(fragment in r for r in reduction["refusals"]), reduction
 
 
-def test_missing_a_provider_cannot_reduce_to_success():
-    records = qualified_records()[:1]
+def test_a_stale_permission_cannot_reduce_to_success(tmp_path, fresh):
+    """The reducer is the layer below the guard, and the same boolean trap
+    lived here too."""
+    bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
+                                   lineage_records=qualified_records(fresh),
+                                   auth_generation=4)
+    reduction = evidence.reduce(bundle, current_head_sha=H8,
+                                permission=stale_permission(tmp_path),
+                                auth_generation=4)
+    assert reduction["verdict"] == evidence.NOT_ESTABLISHED
+    assert any("STALE" in r for r in reduction["refusals"])
+
+
+def test_missing_a_provider_cannot_reduce_to_success(fresh):
+    records = qualified_records(fresh)[:1]
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
                                    lineage_records=records, auth_generation=4)
-    reduction = evidence.reduce(bundle, current_head_sha=H8, authorized=True,
+    reduction = evidence.reduce(bundle, current_head_sha=H8, permission=fresh,
                                 auth_generation=4)
     assert reduction["verdict"] == evidence.NOT_ESTABLISHED
 
 
-def test_ambiguous_generations_cannot_reduce_to_success():
-    records = qualified_records() + qualified_records()
+def test_ambiguous_generations_cannot_reduce_to_success(fresh):
+    records = qualified_records(fresh) + qualified_records(fresh)
     for i, r in enumerate(records):
         r["generation"] = i + 1
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
                                    lineage_records=records, auth_generation=4)
-    reduction = evidence.reduce(bundle, current_head_sha=H8, authorized=True,
+    reduction = evidence.reduce(bundle, current_head_sha=H8, permission=fresh,
                                 auth_generation=4)
     assert reduction["verdict"] == evidence.NOT_ESTABLISHED
     assert any("ambiguous" in r for r in reduction["refusals"])
@@ -448,11 +488,11 @@ def test_a_bundle_must_be_bound_to_a_full_head():
 
 # --- publication guards --------------------------------------------------------
 
-def test_guard_refuses_success_when_the_head_moved(store):
+def test_guard_refuses_success_when_the_head_moved(store, fresh):
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
-                                   lineage_records=qualified_records(),
+                                   lineage_records=qualified_records(fresh),
                                    auth_generation=4)
-    reduction = evidence.reduce(bundle, current_head_sha=H8, authorized=True,
+    reduction = evidence.reduce(bundle, current_head_sha=H8, permission=fresh,
                                 auth_generation=4)
     e = store.open_epoch(repo=REPO, pr_number=8, head_sha=H8, opened_at="t")
     with pytest.raises(publish.PublishRefused):
@@ -460,7 +500,7 @@ def test_guard_refuses_success_when_the_head_moved(store):
                         epoch_id=e["epoch_id"], head_sha=H8,
                         conclusion="success", bundle=bundle,
                         reduction=reduction, current_head_sha="f" * 40,
-                        authorized=True, store=store)
+                        permission=fresh, store=store)
 
 
 @pytest.mark.parametrize("conclusion", ["neutral", "skipped"])
@@ -470,10 +510,10 @@ def test_conclusions_that_read_as_passing_are_excluded(conclusion, store):
         publish.publish(lambda *a, **k: (201, {"id": 1}), repo=REPO,
                         epoch_id=e["epoch_id"], head_sha=H8,
                         conclusion=conclusion, bundle={}, reduction={},
-                        current_head_sha=H8, authorized=True, store=store)
+                        current_head_sha=H8, permission=fresh, store=store)
 
 
-def test_failure_needs_no_guard(store):
+def test_failure_needs_no_guard(store, fresh):
     """Refusing to fail closed while unauthorized would strand a green
     check exactly when nobody is watching it."""
     e = store.open_epoch(repo=REPO, pr_number=8, head_sha=H8, opened_at="t")
@@ -488,7 +528,7 @@ def test_failure_needs_no_guard(store):
                         bundle={"head_sha": H8, "schema": "s",
                                 "bundle_hash": "h"},
                         reduction={"verdict": "NOT_ESTABLISHED"},
-                        current_head_sha=H8, authorized=False, store=store)
+                        current_head_sha=H8, permission=fresh, store=store)
     assert r["state"] == "CONFIRMED"
 
 

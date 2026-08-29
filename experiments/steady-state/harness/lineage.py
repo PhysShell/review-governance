@@ -15,6 +15,8 @@ import datetime
 import hashlib
 import json
 
+import auth_policy
+
 SCHEMA_NAME = "ProviderRequestLineage-v1"
 PROVIDERS = ("codex", "coderabbit")
 
@@ -33,7 +35,8 @@ def utcnow():
 
 
 def request(*, repo, pr_number, provider, requested_for_head, generation,
-            accepted_at, request_carrier_id=None, requested_at=None):
+            accepted_at, permission, request_carrier_id=None,
+            requested_at=None):
     """The record a trigger path must write *before* it posts anything.
 
     Written first on purpose. A request whose carrier id is unknown because
@@ -41,6 +44,14 @@ def request(*, repo, pr_number, provider, requested_for_head, generation,
     already established that such a state must not be resolved by posting
     again.
     """
+    # Evaluated immediately before EACH request, never once per round: a
+    # permission checked at the start of a round and reused at the end is a
+    # permission about a moment that has passed.
+    permission = auth_policy.require(permission)
+    if not permission.permits_action:
+        raise LineageError(
+            f"provider request refused before the network: authorization "
+            f"permission is {permission.state} (age={permission.age_seconds}s)")
     if provider not in PROVIDERS:
         raise LineageError(f"unknown provider {provider!r}")
     if len(requested_for_head or "") != 40:
@@ -52,6 +63,7 @@ def request(*, repo, pr_number, provider, requested_for_head, generation,
         "requested_for_head": requested_for_head,
         "accepted_at": accepted_at,
         "requested_at": requested_at or utcnow(),
+        "authorization": permission.as_dict(),
         "request_carrier_id": request_carrier_id,
         "state": REQUESTED if request_carrier_id else OUTCOME_UNKNOWN,
         "terminal_carriers": [],

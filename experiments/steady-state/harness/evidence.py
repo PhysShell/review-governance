@@ -16,6 +16,8 @@ import datetime
 import hashlib
 import json
 
+import auth_policy
+
 SCHEMA_NAME = "ProductionEvidenceBundle-v1"
 
 SUCCESS = "SUCCESS"
@@ -54,7 +56,7 @@ def build_bundle(*, repo, pr_number, head_sha, lineage_records,
     return payload
 
 
-def reduce(bundle, *, current_head_sha, authorized, auth_generation):
+def reduce(bundle, *, current_head_sha, permission, auth_generation):
     """The only function permitted to conclude SUCCESS, and it rarely does.
 
     Every refusal is named. The list is the point: a reducer that returns a
@@ -62,13 +64,19 @@ def reduce(bundle, *, current_head_sha, authorized, auth_generation):
     that reaches SUCCESS as its default branch is a gate that opens when
     confused.
     """
+    # The reducer takes a permission rather than a boolean for the same
+    # reason the guard does: a durable SUCCESS decision recorded on a stale
+    # reading would be a durable record of something that was not true.
+    permission = auth_policy.require(permission)
     reasons = []
     if bundle.get("schema") != SCHEMA_NAME:
         reasons.append(f"unknown bundle schema {bundle.get('schema')!r}")
     if bundle.get("head_sha") != current_head_sha:
         reasons.append("bundle is bound to a head that is no longer current")
-    if not authorized:
-        reasons.append("user authorization does not permit a success")
+    if not permission.permits_action:
+        reasons.append(
+            f"authorization permission is {permission.state} "
+            f"(age={permission.age_seconds}s)")
     if bundle.get("auth_generation") != auth_generation:
         reasons.append(
             f"bundle was built under auth generation "

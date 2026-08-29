@@ -23,6 +23,8 @@ run decides (A3b-c4).
 """
 import datetime
 
+import auth_policy
+
 PRODUCTION_CONTEXT = "ai/final-review"
 GOVERNOR_APP_ID = 4669438
 PASSING = frozenset({"success", "neutral", "skipped"})
@@ -38,12 +40,15 @@ def utcnow():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def guard(*, reduction, bundle, current_head_sha, authorized):
+def guard(*, reduction, bundle, current_head_sha, permission):
     """Evaluated immediately before the write, never earlier.
 
     A guard checked at the start of a round and trusted at the end is a
     guard about a moment that has passed.
     """
+    # Refused here rather than deeper down, so a caller that lost the
+    # provenance fails at the place it lost it.
+    permission = auth_policy.require(permission)
     refusals = []
     if reduction.get("verdict") != "SUCCESS":
         refusals.append(f"reducer returned {reduction.get('verdict')}")
@@ -51,9 +56,12 @@ def guard(*, reduction, bundle, current_head_sha, authorized):
         refusals.append("bundle head is no longer the current head")
     if reduction.get("head_sha") != current_head_sha:
         refusals.append("reduction was computed for another head")
-    if not authorized:
-        refusals.append("authorization does not permit a passing conclusion")
-    return {"may_publish_success": not refusals, "refusals": refusals}
+    if not permission.permits_action:
+        refusals.append(
+            f"authorization permission is {permission.state} "
+            f"(age={permission.age_seconds}s): {permission.cause}")
+    return {"may_publish_success": not refusals, "refusals": refusals,
+            "authorization": permission.as_dict()}
 
 
 def summary_for(verdict, bundle):
@@ -69,7 +77,7 @@ def summary_for(verdict, bundle):
 
 
 def publish(request, *, repo, epoch_id, head_sha, conclusion, bundle,
-            reduction, current_head_sha, authorized, store, existing_run=None):
+            reduction, current_head_sha, permission, store, existing_run=None):
     """Publish, then believe the readback rather than the write."""
     if conclusion in FORBIDDEN:
         raise PublishRefused(
@@ -80,7 +88,7 @@ def publish(request, *, repo, epoch_id, head_sha, conclusion, bundle,
     if conclusion in PASSING:
         checked = guard(reduction=reduction, bundle=bundle,
                         current_head_sha=current_head_sha,
-                        authorized=authorized)
+                        permission=permission)
         if not checked["may_publish_success"]:
             raise PublishRefused(
                 "pre-publication guard refused: " + "; ".join(checked["refusals"]))

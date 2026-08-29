@@ -1,0 +1,41 @@
+{
+  "qualification": "AUTH_FRESHNESS_CLOSURE against the real production fact",
+  "stored_fact": {
+    "state": "AUTHORIZED",
+    "auth_generation": 4,
+    "observed_at": "2026-08-26T13:07:33Z",
+    "source": "device_flow"
+  },
+  "derived_permission": {
+    "state": "STALE",
+    "observation_id": 4,
+    "auth_generation": 4,
+    "observed_at": "2026-08-26T13:07:33Z",
+    "age_seconds": 257302,
+    "source": "device_flow",
+    "evaluated_at": "2026-08-29T12:35:54Z",
+    "cause": "observation is 257302s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+  },
+  "history_len_before": 4,
+  "accept_attempt": {
+    "state": "REFUSED",
+    "failures": [
+      "authorization permission is STALE (age=257302s): observation is 257302s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+    ]
+  },
+  "provider_request": {
+    "refused": true,
+    "before_network": true,
+    "reason": "provider request refused before the network: authorization permission is STALE (age=257302s)"
+  },
+  "success_guard": {
+    "may_publish_success": false,
+    "refusals": [
+      "authorization permission is STALE (age=257302s): observation is 257302s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+    ]
+  },
+  "history_len_after": 4,
+  "auth_history_unchanged": true,
+  "provider_requests_sent": 0,
+  "production_writes": 0
+}
