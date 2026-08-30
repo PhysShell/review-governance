@@ -1,0 +1,216 @@
+{
+  "auth": {
+    "stored": "AUTHORIZED",
+    "derived": "STALE",
+    "age_seconds": 85539,
+    "auth_generation": 5
+  },
+  "signatures": {
+    "record_observation": [
+      "base",
+      "epoch_id",
+      "pr_number",
+      "read",
+      "repo",
+      "ruleset_id",
+      "self"
+    ],
+    "record_acceptance": [
+      "accepted_at",
+      "epoch_id",
+      "head_sha",
+      "observation_id",
+      "observation_max_age",
+      "permission",
+      "pr_number",
+      "repo",
+      "self"
+    ],
+    "observe": [
+      "epoch_id",
+      "ruleset_id",
+      "self"
+    ],
+    "accept_candidate": [
+      "epoch_id",
+      "observation",
+      "self"
+    ],
+    "conclude": [
+      "epoch_id",
+      "existing_run",
+      "patch",
+      "records",
+      "ruleset_id",
+      "self"
+    ],
+    "collect_evidence": [
+      "generation",
+      "provider",
+      "self",
+      "sent"
+    ]
+  },
+  "removed_callbacks": {
+    "ruleset_verified_fn": true,
+    "carrier_fn": true,
+    "open_generations_argument": true,
+    "open_generations_derived_from_store": true
+  },
+  "fabricated_observation": "refused: TypeError: RoundStore.record_observation() got an unexpected keyword argument 'head_sha'",
+  "observation": {
+    "observation_id": "obs-b5d90f6f17b57e82b4115f06",
+    "reads": [
+      "/pulls/32",
+      "/commits/main",
+      "/compare/047ff1a641e33e0bb8c6b9eea26bb80eea021e08...7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+      "/rulesets/21640654",
+      "/commits/7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52/check-runs?per_page=100"
+    ],
+    "pr": {
+      "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+      "draft": false,
+      "pr_state": "open",
+      "base_ref": "main"
+    },
+    "ancestry": {
+      "base_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+      "merge_base_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+      "compare_status": "ahead",
+      "behind_by": 0,
+      "contains_current_base": true
+    },
+    "ruleset": {
+      "ruleset_id": 21640654,
+      "ruleset_enforcement": "active",
+      "ruleset_visible_hash": "d7862d47542833ead6cd93481e0bc7fd7b849e513d330c34ad5645e4bfef2d7c",
+      "ruleset_bypass": "UNOBSERVABLE_BY_RUNTIME_IDENTITY"
+    },
+    "carrier": {
+      "carrier_count": 1,
+      "carrier_run_id": 99104297860,
+      "carrier_status": "completed",
+      "carrier_conclusion": "failure",
+      "carrier_external_id": "pe-5a41d21a944c13836e1cc6ff"
+    }
+  },
+  "derived_from_the_reading": {
+    "base": "OK",
+    "ruleset": "OK",
+    "carrier": "OK"
+  },
+  "pinned_hash_is_the_reviewed_policy": true,
+  "durable_accept": {
+    "written": false,
+    "reason": "acceptance refused by preconditions: authorization permission is STALE (age=85543s): observation is 85543s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+  },
+  "superseded_observation": "refused: observation obs-b5d90f6f17b57e82b4115f06 is not the latest reading for PhysShell/evm-from-",
+  "pre_success_ruleset_reread": {
+    "verified": true,
+    "problems": [],
+    "ruleset_id": 21640654,
+    "ruleset_enforcement": "active",
+    "ruleset_visible_hash": "d7862d47542833ead6cd93481e0bc7fd7b849e513d330c34ad5645e4bfef2d7c",
+    "ruleset_bypass": "UNOBSERVABLE_BY_RUNTIME_IDENTITY"
+  },
+  "ruleset_bypass_owner_check": {
+    "state": "EMPTY",
+    "bypass_actors": 0,
+    "enforcement": "active"
+  },
+  "health": {
+    "all_fresh": true,
+    "not_fresh": [],
+    "candidate_bound": true,
+    "states": {
+      "runtime": "FRESH",
+      "reconciliation": "FRESH",
+      "watchdog": "FRESH"
+    }
+  },
+  "observation_rows": 4,
+  "acceptance_rows": 0,
+  "provider_request_rows": 0,
+  "live": {
+    "32": {
+      "head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+      "governor_runs": [
+        {
+          "id": 99104297860,
+          "conclusion": "failure"
+        }
+      ],
+      "governor_comments": []
+    },
+    "8": {
+      "head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+      "governor_runs": [
+        {
+          "id": 99099324325,
+          "conclusion": "failure"
+        }
+      ],
+      "governor_comments": []
+    }
+  },
+  "provider_network_writes": 0,
+  "production_success_writes": 0,
+  "reads_performed": 17,
+  "writes_performed": 0,
+  "stage": "A6f-c4 live observation authority closure",
+  "deployment": {
+    "commit": "bbe1c91aad26f19d9866665f0fcc31142a48bcf0",
+    "working_tree_clean": true,
+    "governor_runtime_started_at": "Sun 2026-08-30 12:32:04 UTC",
+    "governor_sentinel_started_at": "Sun 2026-08-30 12:32:04 UTC",
+    "retired_observations_archived": "~/.config/review-governor/rounds.retired-observations.json"
+  },
+  "acceptance_matrix": {
+    "PR_FACTS_READ_BY_DRIVER": "PASS",
+    "BASE_SHA_READ_BY_DRIVER": "PASS",
+    "CURRENT_MAIN_ANCESTRY_PROVEN": "PASS",
+    "RULESET_CALLBACK": "REMOVED",
+    "RULESET_READ_BY_DRIVER": "PASS",
+    "RULESET_FULL_POLICY_MATCH": "PASS over the projection this identity can read; bypass_actors is NOT_PROVIDED here and checked by the owner-credentialed sentinel",
+    "CARRIER_CALLBACK": "REMOVED",
+    "CARRIER_READ_BY_DRIVER": "PASS",
+    "CARRIER_FULL_IDENTITY_MATCH": "PASS",
+    "OPEN_GENERATIONS_ARGUMENT": "REMOVED",
+    "OPEN_GENERATIONS_DERIVED_FROM_STORE": "PASS",
+    "DIRECT_FABRICATED_OBSERVATION_CANNOT_ACCEPT": "PASS",
+    "STALE_OBSERVATION_CANNOT_ACCEPT": "PASS",
+    "HISTORICAL_OBSERVATION_ID_CANNOT_BE_REUSED": "PASS",
+    "PRE_SUCCESS_RULESET_CALLBACK": "REMOVED",
+    "PRE_SUCCESS_RULESET_LIVE_REREAD": "PASS",
+    "END_TO_END_OFFLINE_ROUND": "PASS",
+    "REAL_PROVIDER_REQUESTS": 0,
+    "REAL_SUCCESS_WRITES": 0
+  },
+  "not_provided": {
+    "RULESET_BYPASS_EMPTY_BY_RUNTIME_IDENTITY": {
+      "state": "NOT_PROVIDED",
+      "cause": "the Governor App's view of a ruleset omits bypass_actors; the owner token returns []. Confirmed against 21640654 on 2026-08-30.",
+      "consequence": "the pinned ACTIVE_RULESET_HASH (3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20) is unreproducible from the runtime identity; APP_VISIBLE_RULESET_HASH is pinned separately over the five keys it can read",
+      "compensating_control": "sentinel.check_ruleset_bypass, owner credential, pages ruleset_bypass_present on POPULATED, UNREADABLE or UNOBSERVABLE",
+      "observed_now": {
+        "state": "EMPTY",
+        "bypass_actors": 0,
+        "enforcement": "active"
+      }
+    }
+  },
+  "tests": {
+    "total": 503,
+    "failed": 0
+  },
+  "forbidden_actions_not_taken": [
+    "fresh /user probe",
+    "live ACCEPT",
+    "Codex",
+    "CodeRabbit",
+    "SUCCESS patch",
+    "HEAD mutation on #32",
+    "merge",
+    "ruleset or App changes"
+  ]
+}
