@@ -40,16 +40,54 @@ INVOCATION = {
     CODERABBIT: "@coderabbitai review",
 }
 
-#: Identities a terminal answer must come from. Recorded here so the
-#: collector can refuse a carrier that merely says the right words.
-PROVIDER_APP_ID = {
-    CODEX: 199175422,
-    CODERABBIT: 347564,
+#: Identities a terminal answer must come from, read from the live surface
+#: rather than assumed.
+#:
+#: The previous table called one field `PROVIDER_APP_ID` and put two
+#: different kinds of identifier in it. CodeRabbit's 347564 is the App id;
+#: Codex's 199175422 is the **bot user** id, and the Codex App is 1144995.
+#: So `performed_via_github_app.id == 199175422` was false on every real
+#: Codex carrier — the check only ever passed because the fixtures inserted
+#: that number into a field GitHub fills with the other one.
+#:
+#: Verified over all nine bot carriers on `#8` and against `GET /apps/{slug}`:
+#:
+#:     coderabbitai[bot]             user 136622811   app  347564
+#:     chatgpt-codex-connector[bot]  user 199175422   app 1144995
+#:
+#: Three fields because no single one covers both surfaces: an issue
+#: comment carries `performed_via_github_app`, and a reaction carries only
+#: its user.
+PROVIDER_IDENTITY = {
+    CODEX: {"app_id": 1144995, "bot_user_id": 199175422,
+            "login": "chatgpt-codex-connector[bot]"},
+    CODERABBIT: {"app_id": 347564, "bot_user_id": 136622811,
+                 "login": "coderabbitai[bot]"},
 }
-PROVIDER_LOGIN = {
-    CODEX: "chatgpt-codex-connector[bot]",
-    CODERABBIT: "coderabbitai[bot]",
-}
+PROVIDER_LOGIN = {p: i["login"] for p, i in PROVIDER_IDENTITY.items()}
+PROVIDER_APP = {p: i["app_id"] for p, i in PROVIDER_IDENTITY.items()}
+PROVIDER_BOT_USER = {p: i["bot_user_id"] for p, i in PROVIDER_IDENTITY.items()}
+
+
+def identity_of(carrier):
+    """The three identifiers a carrier actually offers, whichever it has."""
+    return {
+        "app_id": ((carrier.get("performed_via_github_app") or {}).get("id")
+                   or (carrier.get("app") or {}).get("id")),
+        "user_id": (carrier.get("user") or {}).get("id"),
+        "login": (carrier.get("user") or {}).get("login"),
+    }
+
+
+def _unused_provider_app_id(*args, **kwargs):
+    """`PROVIDER_APP_ID` retired: it conflated an App id with a user id.
+
+    Left as a raising trap rather than deleted, because a name that used to
+    resolve is the easiest thing in the world to type back in.
+    """
+    raise TriggerRefused(
+        "PROVIDER_APP_ID conflated App ids with bot user ids; use "
+        "PROVIDER_IDENTITY, which names which is which")
 
 
 class TriggerRefused(Exception):

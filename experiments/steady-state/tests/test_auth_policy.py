@@ -217,7 +217,13 @@ def test_fresh_permits_the_success_guard(store):
                             permission=fresh(store), existing_run=99104297860,
                             health={"observations": {n: {"state": "FRESH"} for n in
                                     ("runtime", "reconciliation", "watchdog")},
-                                   "all_fresh": True, "not_fresh": []})
+                                   "all_fresh": True, "not_fresh": [],
+                                   # A6f-c3: the health set must name the
+                                   # candidate it was evaluated about.
+                                   "candidate_bound": True,
+                                   "candidate": {"repo": "PhysShell/evm-from-scratch",
+                                                 "pr_number": 32,
+                                                 "head_sha": H}})
     assert checked["may_publish_success"] is True
 
 

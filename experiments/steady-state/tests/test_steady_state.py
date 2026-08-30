@@ -389,6 +389,9 @@ def test_no_module_here_can_post_a_provider_request():
 
 # --- the reducer and the positive path ----------------------------------------
 
+STANDING = {"acceptance_id": "acc-h8", "head_sha": H8}
+
+
 def qualified_records(permission, head=H8, snaps=None):
     """A6f shape: admissibility and a provider predicate, not the A6a
     boolean. The old helper produced records whose `qualified` said nothing
@@ -418,6 +421,8 @@ def qualified_records(permission, head=H8, snaps=None):
                             frozen_at="t")
         r["request_id"] = f"req-{provider}"
         r["request_carrier_id"] = 1
+        r["acceptance_id"] = STANDING["acceptance_id"]
+        r["baseline_id"] = "base-h8"
         r["terminal"] = {"carrier_id": 2, "state": collector.ADMISSIBLE,
                          "admissible": True}
         r["predicate"] = predicates.evaluate(provider, payload)
@@ -432,19 +437,29 @@ def test_the_positive_path_exists_end_to_end(store, fresh):
     begins, or the system starts work it cannot finish."""
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
                                    lineage_records=qualified_records(fresh),
-                                   auth_generation=4)
+                                   auth_generation=4,
+                                   acceptance_id=STANDING["acceptance_id"])
     reduction = evidence.reduce(bundle, current_head_sha=H8, permission=fresh,
-                                auth_generation=4)
+                                standing_acceptance=STANDING)
     assert reduction["verdict"] == evidence.SUCCESS
 
     e = store.open_epoch(repo=REPO, pr_number=8, head_sha=H8, opened_at="t")
     seen = {}
 
     def request(method, path, body=None):
+        if method == "GET" and "/commits/" in path:
+            return 200, {"check_runs": [{"id": 77, "name": "ai/final-review",
+                                         "app": {"id": 4669438},
+                                         "head_sha": H8}]}
         if method == "GET":
+            # Failure before the write, success on the readback: the
+            # pre-write guard proves the target, the readback proves the
+            # result.
             return 200, {"id": 77, "name": "ai/final-review",
                          "app": {"id": 4669438}, "head_sha": H8,
-                         "external_id": e["epoch_id"], "conclusion": "success"}
+                         "external_id": e["epoch_id"],
+                         "conclusion": "success" if seen.get("method")
+                         else "failure"}
         seen["method"] = method
         return 200, {}
 
@@ -454,6 +469,9 @@ def test_the_positive_path_exists_end_to_end(store, fresh):
                         permission=fresh, store=store, existing_run=77,
                         health={"observations": {n: {"state": "FRESH"} for n in
                                  ("runtime", "reconciliation", "watchdog")},
+                                "candidate_bound": True,
+                                "candidate": {"repo": REPO, "pr_number": 8,
+                                              "head_sha": H8},
                                 "all_fresh": True, "not_fresh": []})
     assert r["state"] == "CONFIRMED" and r["observed"] == "success"
     assert store.projection(e["epoch_id"])["state"] == "CONFIRMED"
@@ -461,15 +479,27 @@ def test_the_positive_path_exists_end_to_end(store, fresh):
 
 @pytest.mark.parametrize("kwargs,fragment", [
     ({"current_head_sha": "f" * 40}, "no longer current"),
-    ({"auth_generation": 5}, "auth generation"),
+    ({"permission": "OTHER_GENERATION"}, "auth generation"),
 ])
 def test_stale_or_unauthorized_cannot_reduce_to_success(kwargs, fragment,
-                                                        fresh):
+                                                        fresh, tmp_path):
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
                                    lineage_records=qualified_records(fresh),
-                                   auth_generation=4)
-    base = {"current_head_sha": H8, "permission": fresh, "auth_generation": 4}
+                                   auth_generation=4,
+                                   acceptance_id=STANDING["acceptance_id"])
+    base = {"current_head_sha": H8, "permission": fresh,
+            "standing_acceptance": STANDING}
     base.update(kwargs)
+    if base["permission"] == "OTHER_GENERATION":
+        # The generation is read off the permission now, so the way to be
+        # at another generation is to hold another authorization.
+        a = auth_state.AuthStore(tmp_path / "gen5.sqlite3")
+        a.record(state="AUTHORIZED", auth_generation=5,
+                 observed_at=ap.datetime.datetime.now(
+                     ap.datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                 source="device_flow")
+        base["permission"] = ap.evaluate(a)
+        a.close()
     reduction = evidence.reduce(bundle, **base)
     assert reduction["verdict"] == evidence.NOT_ESTABLISHED
     assert any(fragment in r for r in reduction["refusals"]), reduction
@@ -480,10 +510,11 @@ def test_a_stale_permission_cannot_reduce_to_success(tmp_path, fresh):
     lived here too."""
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
                                    lineage_records=qualified_records(fresh),
-                                   auth_generation=4)
+                                   auth_generation=4,
+                                   acceptance_id=STANDING["acceptance_id"])
     reduction = evidence.reduce(bundle, current_head_sha=H8,
                                 permission=stale_permission(tmp_path),
-                                auth_generation=4)
+                                standing_acceptance=STANDING)
     assert reduction["verdict"] == evidence.NOT_ESTABLISHED
     assert any("STALE" in r for r in reduction["refusals"])
 
@@ -493,7 +524,7 @@ def test_missing_a_provider_cannot_reduce_to_success(fresh):
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
                                    lineage_records=records, auth_generation=4)
     reduction = evidence.reduce(bundle, current_head_sha=H8, permission=fresh,
-                                auth_generation=4)
+                                standing_acceptance=STANDING)
     assert reduction["verdict"] == evidence.NOT_ESTABLISHED
 
 
@@ -504,7 +535,7 @@ def test_ambiguous_generations_cannot_reduce_to_success(fresh):
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
                                    lineage_records=records, auth_generation=4)
     reduction = evidence.reduce(bundle, current_head_sha=H8, permission=fresh,
-                                auth_generation=4)
+                                standing_acceptance=STANDING)
     assert reduction["verdict"] == evidence.NOT_ESTABLISHED
     assert any("ambiguous" in r for r in reduction["refusals"])
 
@@ -520,9 +551,10 @@ def test_a_bundle_must_be_bound_to_a_full_head():
 def test_guard_refuses_success_when_the_head_moved(store, fresh):
     bundle = evidence.build_bundle(repo=REPO, pr_number=8, head_sha=H8,
                                    lineage_records=qualified_records(fresh),
-                                   auth_generation=4)
+                                   auth_generation=4,
+                                   acceptance_id=STANDING["acceptance_id"])
     reduction = evidence.reduce(bundle, current_head_sha=H8, permission=fresh,
-                                auth_generation=4)
+                                standing_acceptance=STANDING)
     e = store.open_epoch(repo=REPO, pr_number=8, head_sha=H8, opened_at="t")
     with pytest.raises(publish.PublishRefused):
         publish.publish(lambda *a, **k: (201, {"id": 1}), repo=REPO,

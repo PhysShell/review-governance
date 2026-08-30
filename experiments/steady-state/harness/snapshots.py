@@ -107,17 +107,25 @@ class SnapshotStore:
         `read_ok` is stored rather than inferred, because an observed empty
         provider surface is perfectly valid on a new PR while an
         unobserved one is not, and the two are otherwise identical.
+
+        The id is per-capture, not content-addressed. Deriving it from the
+        payload digest made two readings of an unchanged surface the same
+        row, so a request could cite a capture that happened hours before
+        it — and the whole point of a baseline is the causal order of the
+        reading, not the bytes it found. Identical content in two readings
+        is the normal case and must still be two events.
         """
         digest = digest_of(payload)
-        bid = "base-" + digest[:24]
-        existing = self.baseline(bid)
-        if existing:
-            if (existing["repo"], existing["pr_number"], existing["provider"]) \
-                    != (repo, int(pr_number), provider):
-                raise SnapshotError(
-                    "a baseline with this digest exists for another scope; "
-                    "refusing to return somebody else's provenance")
-            return existing
+        seq = (self.conn.execute(
+            "SELECT COUNT(*) FROM baselines WHERE repo=? AND pr_number=? "
+            "AND provider=?", (repo, int(pr_number), provider)).fetchone()[0])
+        bid = "base-" + hashlib.sha256(
+            f"{repo}\x00{pr_number}\x00{provider}\x00{captured_at}\x00{seq}"
+            f"\x00{digest}".encode()).hexdigest()[:24]
+        if self.baseline(bid):
+            raise SnapshotError(
+                f"baseline {bid} already recorded; a capture is an event and "
+                "is written once")
         self.conn.execute(
             "INSERT INTO baselines (baseline_id, baseline_digest, repo,"
             " pr_number, provider, read_ok, payload, captured_at)"

@@ -27,6 +27,21 @@ import sqlite3
 from pathlib import Path
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS observations (
+    observation_id      TEXT PRIMARY KEY,
+    repo                TEXT NOT NULL,
+    pr_number           INTEGER NOT NULL,
+    head_sha            TEXT NOT NULL,
+    draft               INTEGER NOT NULL,
+    base_ref            TEXT NOT NULL,
+    pr_state            TEXT NOT NULL,
+    ruleset_id          INTEGER,
+    ruleset_verified    INTEGER NOT NULL,
+    carrier_state       TEXT,
+    carrier_head_sha    TEXT,
+    carrier_run_id      INTEGER,
+    observed_at         TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS acceptances (
     acceptance_id       TEXT PRIMARY KEY,
     repo                TEXT NOT NULL,
@@ -36,25 +51,45 @@ CREATE TABLE IF NOT EXISTS acceptances (
     accepted_at         TEXT NOT NULL,
     auth_observation_id INTEGER,
     auth_generation     INTEGER,
+    observation_id      TEXT NOT NULL,
+    carrier_run_id      INTEGER,
+    ruleset_id          INTEGER,
     state               TEXT NOT NULL,
-    UNIQUE (repo, pr_number, head_sha, accepted_at)
+    -- One acceptance per reading. Keying on `accepted_at` collapsed two
+    -- acceptances written in the same second, which is exactly the
+    -- A -> B -> A case: a genuinely new acceptance of a genuinely new
+    -- observation, refused because a clock had one-second resolution.
+    UNIQUE (repo, pr_number, head_sha, observation_id)
 );
 CREATE TABLE IF NOT EXISTS provider_requests (
-    request_id          TEXT PRIMARY KEY,
-    acceptance_id       TEXT NOT NULL,
-    repo                TEXT NOT NULL,
-    pr_number           INTEGER NOT NULL,
-    provider            TEXT NOT NULL,
-    generation          INTEGER NOT NULL,
-    requested_for_head  TEXT NOT NULL,
-    auth_observation_id INTEGER,
-    auth_generation     INTEGER,
-    intent_recorded_at  TEXT NOT NULL,
-    request_carrier_id  INTEGER,
-    request_outcome     TEXT NOT NULL,
-    outcome_recorded_at TEXT,
+    request_id           TEXT PRIMARY KEY,
+    acceptance_id        TEXT NOT NULL,
+    repo                 TEXT NOT NULL,
+    pr_number            INTEGER NOT NULL,
+    provider             TEXT NOT NULL,
+    generation           INTEGER NOT NULL,
+    requested_for_head   TEXT NOT NULL,
+    auth_observation_id  INTEGER,
+    auth_generation      INTEGER,
+    baseline_id          TEXT NOT NULL,
+    baseline_digest      TEXT NOT NULL,
+    baseline_captured_at TEXT NOT NULL,
+    intent_recorded_at   TEXT NOT NULL,
+    request_carrier_id   INTEGER,
+    request_outcome      TEXT NOT NULL,
+    outcome_recorded_at  TEXT,
     UNIQUE (acceptance_id, provider, generation)
 );
+CREATE TRIGGER IF NOT EXISTS observations_no_update
+BEFORE UPDATE ON observations
+BEGIN SELECT RAISE(ABORT, 'an observation records what was read and cannot be rewritten'); END;
+CREATE TRIGGER IF NOT EXISTS observations_no_delete
+BEFORE DELETE ON observations
+BEGIN SELECT RAISE(ABORT, 'observations are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS requests_no_baseline_update
+BEFORE UPDATE OF baseline_id, baseline_digest, baseline_captured_at
+ON provider_requests
+BEGIN SELECT RAISE(ABORT, 'a request is bound to the capture that preceded it'); END;
 CREATE TRIGGER IF NOT EXISTS acceptances_no_delete
 BEFORE DELETE ON acceptances
 BEGIN SELECT RAISE(ABORT, 'acceptances are append-only'); END;
@@ -98,38 +133,126 @@ class RoundStore:
         self.conn = sqlite3.connect(self.path)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self._migrate()
         self.conn.executescript(SCHEMA)
+        self.conn.commit()
+
+    def _migrate(self):
+        """A6f-c3 added columns `CREATE TABLE IF NOT EXISTS` will not add.
+
+        An empty legacy table is recreated; a populated one is not touched
+        and the store refuses to open. Silently running new code against a
+        table missing the columns that carry the new proofs would produce
+        rows that look complete and are not.
+        """
+        wanted = {
+            "acceptances": {"observation_id", "carrier_run_id", "ruleset_id"},
+            "provider_requests": {"baseline_id", "baseline_digest",
+                                  "baseline_captured_at"},
+        }
+        for table, columns in wanted.items():
+            present = {r[1] for r in self.conn.execute(
+                f"PRAGMA table_info({table})")}
+            if not present or columns <= present:
+                continue
+            rows = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            if rows:
+                raise RoundError(
+                    f"{self.path}: table {table} predates A6f-c3 and holds "
+                    f"{rows} rows; missing {sorted(columns - present)}. "
+                    "Refusing to open: a migration that drops recorded "
+                    "evidence is not a migration.")
+            for trigger in self.conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='trigger' "
+                    "AND tbl_name=?", (table,)).fetchall():
+                self.conn.execute(f"DROP TRIGGER {trigger[0]}")
+            self.conn.execute(f"DROP TABLE {table}")
         self.conn.commit()
 
     def close(self):
         self.conn.close()
 
+    # --- observations -----------------------------------------------------
+    def record_observation(self, *, repo, pr_number, head_sha, draft, base_ref,
+                           pr_state, ruleset_id, ruleset_verified, carrier,
+                           observed_at=None):
+        """What was read from GitHub, written down before anything uses it.
+
+        The acceptance writer will not take a conclusion from a caller, so
+        it needs somewhere to read the facts for itself. This is that row:
+        immutable, timestamped, and produced by the component that made the
+        HTTP request.
+        """
+        observed_at = observed_at or utcnow()
+        carrier = carrier or {}
+        # An observation is an event, like a baseline capture. Two readings
+        # a second apart that find the same state are still two readings,
+        # and collapsing them would let an acceptance cite a reading made
+        # before the thing it is about.
+        seq = self.conn.execute(
+            "SELECT COUNT(*) FROM observations WHERE repo=? AND pr_number=?",
+            (repo, int(pr_number))).fetchone()[0]
+        oid = _ident("obs-", {"repo": repo, "pr": int(pr_number),
+                              "head": head_sha, "at": observed_at, "seq": seq,
+                              "carrier": carrier.get("check_run_id")})
+        self.conn.execute(
+            "INSERT INTO observations (observation_id, repo, pr_number,"
+            " head_sha, draft, base_ref, pr_state, ruleset_id,"
+            " ruleset_verified, carrier_state, carrier_head_sha,"
+            " carrier_run_id, observed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (oid, repo, int(pr_number), head_sha, 1 if draft else 0, base_ref,
+             pr_state, ruleset_id, 1 if ruleset_verified else 0,
+             carrier.get("state"), carrier.get("head_sha"),
+             carrier.get("check_run_id") or carrier.get("run_id"),
+             observed_at))
+        self.conn.commit()
+        return self.observation(oid)
+
+    def observation(self, observation_id):
+        row = self.conn.execute(
+            "SELECT * FROM observations WHERE observation_id=?",
+            (observation_id,)).fetchone()
+        if not row:
+            return None
+        out = dict(row)
+        out["draft"] = bool(out["draft"])
+        out["ruleset_verified"] = bool(out["ruleset_verified"])
+        return out
+
     # --- acceptances ------------------------------------------------------
     def record_acceptance(self, *, repo, pr_number, epoch_id, head_sha,
-                          permission, preconditions, accepted_at=None):
-        """`preconditions` must be a GateEvaluation, not a list.
+                          permission, observation_id, open_generations=(),
+                          accepted_at=None):
+        """The writer runs the gate itself, over a row it loads.
 
-        The previous version accepted any empty list, so a caller with a
-        fresh permission could assert that the gate had passed without it
-        ever running. An empty list is not evidence that anything was
-        evaluated; a GateEvaluation names the repo, PR, head and
-        authorization observation it was computed against, and this store
-        re-checks that they are the ones it is about to write.
+        Two earlier shapes were refused here and both were the same
+        mistake: `preconditions=[]`, and then a hand-built
+        `GateEvaluation`. Neither could be fixed by checking the argument
+        harder, because a caller that can construct the evidence type can
+        construct the evidence.
 
-        Previously this wrote a durable ACCEPTED after checking only the
-        SHA length and the permission, so `accept.preconditions()` could
-        return REFUSED and a durable acceptance could be written anyway.
-        The gate and the record were two mechanisms that never had to
-        agree. Requiring the evaluated failure list here makes bypassing it
-        impossible rather than discouraged.
+        So there is no result argument. `observation_id` points at an
+        immutable row the driver wrote when it read GitHub, and this method
+        re-derives the verdict from that row — including the carrier run and
+        ruleset the previous version stored but never re-checked.
         """
         import gate as gate_mod
+        observation = self.observation(observation_id)
+        if observation is None:
+            raise RoundError(
+                f"no observation {observation_id!r}: an acceptance is "
+                "written from a recorded reading, never from a claim about "
+                "one")
         try:
-            gate_mod.require_matching(preconditions, repo=repo,
-                                      pr_number=pr_number, head_sha=head_sha,
-                                      permission=permission)
+            gate_mod.require_scope(observation, repo=repo, pr_number=pr_number,
+                                   head_sha=head_sha)
+            failures = gate_mod.evaluate_observation(
+                observation, permission, open_generations=open_generations)
         except gate_mod.GateError as exc:
             raise RoundError(str(exc)) from None
+        if failures:
+            raise RoundError("acceptance refused by preconditions: "
+                             + "; ".join(failures))
         if len(head_sha or "") != 40:
             raise RoundError("an acceptance must name the full head")
         if not getattr(permission, "permits_action", False):
@@ -138,13 +261,17 @@ class RoundStore:
                 f"{getattr(permission, 'state', 'MISSING')}")
         accepted_at = accepted_at or utcnow()
         aid = _ident("acc-", {"repo": repo, "pr": int(pr_number),
-                              "head": head_sha, "at": accepted_at})
+                              "head": head_sha, "at": accepted_at,
+                              "observation": observation_id})
         self.conn.execute(
             "INSERT INTO acceptances (acceptance_id, repo, pr_number,"
             " epoch_id, head_sha, accepted_at, auth_observation_id,"
-            " auth_generation, state) VALUES (?,?,?,?,?,?,?,?,?)",
+            " auth_generation, observation_id, carrier_run_id, ruleset_id,"
+            " state) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (aid, repo, int(pr_number), epoch_id, head_sha, accepted_at,
-             permission.observation_id, permission.auth_generation, ACCEPTED))
+             permission.observation_id, permission.auth_generation,
+             observation_id, observation["carrier_run_id"],
+             observation["ruleset_id"], ACCEPTED))
         self.conn.commit()
         return self.acceptance(aid)
 
@@ -192,9 +319,16 @@ class RoundStore:
 
     # --- provider requests -------------------------------------------------
     def record_intent(self, *, acceptance_id, repo, pr_number, provider,
-                      generation, requested_for_head, permission,
+                      generation, requested_for_head, permission, baseline,
                       intent_recorded_at=None):
-        """Written BEFORE the network call, never after."""
+        """Written BEFORE the network call, and bound to the capture.
+
+        `baseline` is the durable capture row, not a dict. Without it here
+        the sequence "capture X, post, collect against Y" was legal: the
+        request knew nothing about which reading preceded it, so the proof
+        that a run id is *new* rested on whichever baseline the collector
+        happened to be handed.
+        """
         if not self.acceptance(acceptance_id):
             raise RoundError("no such acceptance")
         acc = self.acceptance(acceptance_id)
@@ -208,20 +342,41 @@ class RoundStore:
             raise RoundError(
                 f"request intent refused: authorization permission is "
                 f"{getattr(permission, 'state', 'MISSING')}")
+        if not isinstance(baseline, dict) or not baseline.get("baseline_id"):
+            raise RoundError(
+                "a provider request must name the durable baseline capture "
+                "that preceded it; without one, 'this run id is new' is a "
+                "claim about an unspecified reading")
+        if not baseline.get("read_ok"):
+            raise RoundError(
+                "the baseline capture this request would cite did not read "
+                "successfully")
+        if (baseline.get("repo"), int(baseline.get("pr_number", -1)),
+                baseline.get("provider")) != (repo, int(pr_number), provider):
+            raise RoundError(
+                "the baseline capture is for another scope: "
+                f"{baseline.get('repo')}#{baseline.get('pr_number')} "
+                f"{baseline.get('provider')}")
         at = intent_recorded_at or utcnow()
+        if baseline["captured_at"] > at:
+            raise RoundError(
+                "the baseline was captured after this intent; a reading that "
+                "follows the request cannot establish what preceded it")
         rid = _ident("req-", {"acc": acceptance_id, "provider": provider,
                               "gen": int(generation)})
         self.conn.execute(
             "INSERT INTO provider_requests (request_id, acceptance_id, repo,"
             " pr_number, provider, generation, requested_for_head,"
-            " auth_observation_id, auth_generation, intent_recorded_at,"
+            " auth_observation_id, auth_generation, baseline_id,"
+            " baseline_digest, baseline_captured_at, intent_recorded_at,"
             " request_carrier_id, request_outcome)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (rid, acceptance_id, repo, int(pr_number), provider,
              int(generation), requested_for_head,
              getattr(permission, "observation_id", None),
-             getattr(permission, "auth_generation", None), at, None,
-             INTENT_RECORDED))
+             getattr(permission, "auth_generation", None),
+             baseline["baseline_id"], baseline["baseline_digest"],
+             baseline["captured_at"], at, None, INTENT_RECORDED))
         self.conn.commit()
         return self.request(rid)
 

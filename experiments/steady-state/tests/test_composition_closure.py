@@ -35,89 +35,60 @@ RUN = "e9bb8d72-00e8-4f67-9cb2-caf3b22574fe"
 NEW_RUN = "a3d2af24-8685-49a2-9e6e-728a59d8dcd4"
 
 
-@pytest.fixture()
-def store(tmp_path):
-    s = rounds.RoundStore(tmp_path / "r.sqlite3")
-    yield s
-    s.close()
-
-
-@pytest.fixture()
-def fresh(tmp_path):
-    a = auth_state.AuthStore(tmp_path / "a.sqlite3")
-    a.record(state="AUTHORIZED", auth_generation=5,
-             observed_at=datetime.datetime.now(
-                 datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-             source="refresh")
-    yield ap.evaluate(a)
-    a.close()
-
-
-def evaluated_gate(permission, head=A):
-    return gate_mod.evaluate(
-        repo=REPO, pr_number=32, head_sha=head, draft=False, base_ref="main",
-        ruleset_id=21640654, ruleset_verified=True,
-        carrier={"state": "CONFIRMED", "head_sha": head,
-                 "check_run_id": 99104297860},
-        permission=permission, open_generations=[])
+from conftest import (accept, captured_baseline, flat_baseline,  # noqa: E402
+                      record_observation)
 
 
 # --- 1. the ACCEPT gate cannot be bypassed ------------------------------------
 
-def test_durable_acceptance_refuses_without_the_evaluated_gate(store, fresh):
+def test_durable_acceptance_refuses_without_a_recorded_reading(store, fresh):
     """The store used to check a SHA and a permission, so preconditions
-    could refuse and a durable ACCEPTED be written anyway."""
+    could refuse and a durable ACCEPTED be written anyway. Then it took a
+    caller-built result. Now it loads the reading and gates over it."""
     with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
-                                preconditions=None)
-    assert "not evidence that the gate ran" in str(exc.value)
+                                observation_id="obs-none")
+    assert "recorded reading" in str(exc.value)
     assert store.acceptances_for(REPO, 32) == []
 
 
 def test_durable_acceptance_refuses_a_failed_gate(store, fresh):
-    failed = gate_mod.evaluate(
-        repo=REPO, pr_number=32, head_sha=A, draft=True, base_ref="main",
-        ruleset_id=21640654, ruleset_verified=True,
-        carrier={"state": "CONFIRMED", "head_sha": A},
-        permission=fresh, open_generations=[])
-    assert failed.passed is False
+    obs = record_observation(store, draft=True)
     with pytest.raises(rounds.RoundError):
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
-                                preconditions=failed)
+                                observation_id=obs["observation_id"])
     assert store.acceptances_for(REPO, 32) == []
 
 
 def test_a_passed_gate_records(store, fresh):
-    acc = store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
-                                  head_sha=A, permission=fresh,
-                                  preconditions=evaluated_gate(fresh))
-    assert acc["state"] == rounds.ACCEPTED
+    assert accept(store, fresh)["state"] == rounds.ACCEPTED
 
 
 # --- 2. the request is bound to the observation that authorised it ------------
 
 def _accepted(store, fresh):
-    return store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
-                                   head_sha=A, permission=fresh,
-                                   preconditions=evaluated_gate(fresh))
+    return accept(store, fresh)
 
 
-def test_intent_records_observation_and_generation(store, fresh):
-    acc = _accepted(store, fresh)
-    row = store.record_intent(acceptance_id=acc["acceptance_id"], repo=REPO,
-                              pr_number=32, provider="codex", generation=1,
-                              requested_for_head=A, permission=fresh)
+def _intent(store, snaps, fresh, acc, provider="codex"):
+    return store.record_intent(
+        acceptance_id=acc["acceptance_id"], repo=REPO, pr_number=32,
+        provider=provider, generation=1, requested_for_head=A,
+        permission=fresh, baseline=captured_baseline(snaps, provider=provider))
+
+
+def test_intent_records_observation_and_generation(store, snaps, fresh):
+    row = _intent(store, snaps, fresh, _accepted(store, fresh))
     assert row["auth_observation_id"] == fresh.observation_id
     assert row["auth_generation"] == fresh.auth_generation
+    assert row["baseline_id"] and row["baseline_digest"]
 
 
-def test_posting_under_a_different_observation_is_refused(store, fresh, tmp_path):
-    acc = _accepted(store, fresh)
-    row = store.record_intent(acceptance_id=acc["acceptance_id"], repo=REPO,
-                              pr_number=32, provider="codex", generation=1,
-                              requested_for_head=A, permission=fresh)
+def test_posting_under_a_different_observation_is_refused(store, snaps, fresh,
+                                                          tmp_path):
+    row = _intent(store, snaps, fresh, _accepted(store, fresh))
     other = auth_state.AuthStore(tmp_path / "other.sqlite3")
     other.record(state="AUTHORIZED", auth_generation=6,
                  observed_at=datetime.datetime.now(
@@ -133,17 +104,14 @@ def test_posting_under_a_different_observation_is_refused(store, fresh, tmp_path
     assert "does not match the recorded intent" in str(exc.value)
 
 
-def test_intent_refuses_a_stale_permission(store, fresh, tmp_path):
+def test_intent_refuses_a_stale_permission(store, snaps, fresh, stale):
     acc = _accepted(store, fresh)
-    old = auth_state.AuthStore(tmp_path / "old.sqlite3")
-    old.record(state="AUTHORIZED", auth_generation=5,
-               observed_at="2020-01-01T00:00:00Z", source="refresh")
-    stale = ap.evaluate(old)
-    old.close()
     with pytest.raises(rounds.RoundError):
-        store.record_intent(acceptance_id=acc["acceptance_id"], repo=REPO,
-                            pr_number=32, provider="codex", generation=1,
-                            requested_for_head=A, permission=stale)
+        store.record_intent(
+            acceptance_id=acc["acceptance_id"], repo=REPO, pr_number=32,
+            provider="codex", generation=1, requested_for_head=A,
+            permission=stale,
+            baseline=captured_baseline(snaps, provider="codex"))
 
 
 # --- 3/4. generation and association fail closed ------------------------------
@@ -151,16 +119,21 @@ def test_intent_refuses_a_stale_permission(store, fresh, tmp_path):
 def request_row(**over):
     base = {"provider": "coderabbit", "requested_for_head": A,
             "intent_recorded_at": "2026-08-29T14:00:00Z",
-            "request_carrier_id": 500}
+            "request_carrier_id": 500, "acceptance_id": "acc-x",
+            "baseline_id": "base-x"}
     base.update(over)
     return base
 
 
 def carrier(**over):
     base = {"id": 900, "created_at": "2026-08-29T14:05:00Z",
-            "performed_via_github_app": {"id": 347564},
-            "head_claim": A, "generation": 1, "new_run_ids": [NEW_RUN],
-            "carrier_was_rewritten": True, "body": ""}
+            "updated_at": "2026-08-29T14:05:00Z",
+            "author_app_id": 347564, "author_user_id": 136622811,
+            "author_login": "coderabbitai[bot]",
+            "head_claim": A, "head_binding": collector.ATTESTED,
+            "generation": 1, "new_run_ids": [NEW_RUN],
+            "carrier_was_rewritten": True, "body": "",
+            "baseline_digest_for_carrier": "old", "observed_digest": "new"}
     base.update(over)
     return base
 
@@ -179,7 +152,8 @@ def test_missing_association_evidence_is_not_a_match():
     """Issue comments have no in_reply_to_id at all — confirmed live — so
     the old branch never executed and right-bot-plus-later-timestamp was
     enough."""
-    c = carrier(new_run_ids=[], carrier_was_rewritten=False)
+    c = carrier(new_run_ids=[], carrier_was_rewritten=False,
+                baseline_digest_for_carrier=None, observed_digest=None)
     v = collector.admissibility(c, request_row(), head_sha=A, generation=1)
     assert v["admissible"] is False
     assert any(r["code"] == collector.UNASSOCIATED for r in v["refusals"])
@@ -188,15 +162,19 @@ def test_missing_association_evidence_is_not_a_match():
 def test_a_rewritten_sticky_with_a_new_run_is_associated():
     """The real CodeRabbit sticky on #8 was created 20 Aug and updated 29
     Aug: a genuine later review rewrites an older carrier."""
-    c = carrier(created_at="2026-08-20T01:03:30Z", carrier_was_rewritten=True)
+    c = carrier(created_at="2026-08-20T01:03:30Z", carrier_was_rewritten=True,
+                updated_at="2026-08-29T14:05:00Z")
     v = collector.admissibility(c, request_row(), head_sha=A, generation=1)
     assert not any(r["code"] == collector.UNASSOCIATED for r in v["refusals"])
 
 
 def test_a_reaction_on_our_request_is_associated():
     c = carrier(new_run_ids=[], carrier_was_rewritten=False,
+                baseline_digest_for_carrier=None, observed_digest=None,
                 reaction_on_request_carrier=500,
-                performed_via_github_app={"id": 199175422})
+                head_claim=None, head_binding=collector.REQUEST_DERIVED,
+                author_app_id=None, author_user_id=199175422,
+                author_login="chatgpt-codex-connector[bot]")
     v = collector.admissibility(c, request_row(provider="codex"),
                                 head_sha=A, generation=1)
     assert not any(r["code"] == collector.UNASSOCIATED for r in v["refusals"])
@@ -221,7 +199,7 @@ def captured(snaps, comments, provider="coderabbit", read_ok=True,
     `require_baseline` now refuses a caller's dict — an unread surface and
     an empty one are otherwise the same object.
     """
-    app = triggers.PROVIDER_APP_ID[provider]
+    app = triggers.PROVIDER_APP[provider]
     row = snaps.capture_baseline(
         repo=REPO, pr_number=pr_number, provider=provider, read_ok=read_ok,
         payload=parsers.baseline(comments, provider_app=app),
@@ -358,9 +336,21 @@ def test_a_tampered_payload_is_detected_on_replay(snaps):
 
 # --- 7. health is a required, provenance-carrying set -------------------------
 
-def _health_file(tmp_path, name, at):
+def _health_file(tmp_path, name, at, **over):
+    """A signal that is both recent and semantically satisfied.
+
+    Timestamp-only blobs used to pass. Since A6f-c3 each source must also
+    report that it did its job, so the fixture writes what the producers
+    actually write.
+    """
+    import json
+    blob = {"last_complete_pass_at": at, "state": "OK",
+            "comparisons_attempted": 1, "comparisons_performed": 1,
+            "all_compared": True, "per_pr": [],
+            "edge_reachable": True, "watchdog_polls": 1}
+    blob.update(over)
     p = tmp_path / name
-    p.write_text('{"last_complete_pass_at": "%s"}' % at)
+    p.write_text(json.dumps(blob))
     return str(p)
 
 
@@ -392,6 +382,25 @@ def test_an_unreadable_source_is_not_healthy(tmp_path):
     sources["runtime"] = str(bad)
     out = health_mod.evaluate(sources)
     assert out["observations"]["runtime"]["state"] == health_mod.UNREADABLE
+
+
+@pytest.mark.parametrize("source,over,fragment", [
+    ("runtime", {"state": "UNREADABLE"}, "not OK"),
+    ("reconciliation", {"all_compared": False, "comparisons_performed": 0},
+     "compared 0 of"),
+    ("watchdog", {"edge_reachable": False}, "primary's silence"),
+])
+def test_a_recent_signal_that_did_not_do_its_job_is_not_healthy(
+        tmp_path, source, over, fragment):
+    """Freshness says a process ran. The success guard needs the work."""
+    sources = {n: _health_file(tmp_path, f"{n}.json", now_stamp(5))
+               for n in health_mod.REQUIRED}
+    sources[source] = _health_file(tmp_path, f"bad-{source}.json",
+                                   now_stamp(5), **over)
+    out = health_mod.evaluate(sources)
+    assert out["observations"][source]["state"] == health_mod.UNSATISFIED
+    assert fragment in out["observations"][source]["cause"]
+    assert out["all_fresh"] is False
 
 
 def test_a_stale_source_is_not_healthy(tmp_path):

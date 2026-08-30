@@ -78,8 +78,34 @@ SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
 SKIP_MARKERS = ("skip review", "does not receive automatic reviews",
                 "review skipped")
 RATE_MARKERS = ("rate limit", "rate limited")
+
+#: Read from the live surface, not assumed. `CODEX_APP` used to hold
+#: 199175422, which is the bot *user* id; the Codex App is 1144995. The
+#: collector checked `performed_via_github_app.id` against it, so every
+#: real Codex carrier would have been refused as WRONG_PROVIDER_IDENTITY
+#: while the fixtures — which put the user id in the app field — passed.
 CODERABBIT_APP = 347564
-CODEX_APP = 199175422
+CODERABBIT_BOT_USER = 136622811
+CODEX_APP = 1144995
+CODEX_BOT_USER = 199175422
+
+
+def author_identity(raw):
+    """The three identifiers the carrier actually carries.
+
+    Preserved into the parsed observation because the collector needs them
+    and the parser used to drop them: `parse_coderabbit` returned a fresh
+    dict with no `performed_via_github_app` and no `app`, so
+    `collector.admissibility` read `None` and refused every genuinely
+    parsed carrier. Both modules passed their own tests; the composition
+    could not admit anything.
+    """
+    return {
+        "author_app_id": ((raw.get("performed_via_github_app") or {}).get("id")
+                          or (raw.get("app") or {}).get("id")),
+        "author_user_id": (raw.get("user") or {}).get("id"),
+        "author_login": (raw.get("user") or {}).get("login"),
+    }
 
 #: Fields a caller may never supply: they are conclusions, and this module
 #: exists precisely to derive them from raw material.
@@ -210,8 +236,15 @@ def parse_coderabbit(raw_comments, *, base, requested_head, generation):
         rng = RANGE.search(text)
         return {
             "id": c["id"], "provider": "coderabbit",
+            **author_identity(c),
             "created_at": c.get("created_at"),
             "updated_at": c.get("updated_at"),
+            # The digest the baseline held for this carrier, so the
+            # collector can see the mutation rather than take the flag.
+            "baseline_digest_for_carrier": digests.get(
+                c["id"], digests.get(str(c["id"]))),
+            "observed_digest": body_digest(body),
+            "head_binding": "ATTESTED",
             "body": text,
             "reviewed_range": {"from": rng.group(1), "to": rng.group(2)} if rng else None,
             # The head is attested by the *end of the reviewed range*, not
@@ -228,10 +261,55 @@ def parse_coderabbit(raw_comments, *, base, requested_head, generation):
     return None
 
 
+#: The head Codex says it reviewed, in the form it actually writes it.
+#:
+#: Observed on comment 5462308601: `**Reviewed commit:** ` followed by a
+#: ten-character abbreviation. `SHA40` never matched it, so `head_claim`
+#: was None on every real Codex comment and the collector refused all of
+#: them for WRONG_HEAD — while the fixtures, which pasted a full SHA into
+#: free text, passed.
+REVIEWED_COMMIT = re.compile(
+    r"reviewed\s+commit[^`\n]*`([0-9a-f]{7,40})`", re.I)
+
+#: Codex's own words for a clean review, from the live carrier:
+#: "Codex Review: Didn't find any major issues. Swish!"
+CODEX_CLEAN = (
+    r"did\s*n[o']?t\s+find\s+any\s+(?:major\s+)?issues",
+    r"no\s+issues\s+found", r"\bno\s+issues\b", r"\bno\s+findings\b",
+)
+
+
+def _codex_head_claim(body, requested_head):
+    """An abbreviation attests the head only if it is one of its prefixes.
+
+    Prefix matching is deliberately narrow: at least seven hex characters,
+    and compared against the head we asked about rather than searched for
+    among candidates.
+    """
+    for abbrev in REVIEWED_COMMIT.findall(body):
+        if len(abbrev) >= 7 and requested_head.lower().startswith(abbrev.lower()):
+            return requested_head
+    return requested_head if requested_head in SHA40.findall(body) else None
+
+
+def _codex_findings(body):
+    low = body.lower()
+    m = re.search(r"(\d+)\s+(?:issue|finding|problem)s?", low)
+    if m:
+        return [{"kind": "issue"} for _ in range(int(m.group(1)))]
+    if any(re.search(p, low) for p in CODEX_CLEAN):
+        return []
+    return None
+
+
 def parse_codex(raw_comments, raw_reactions, *, base, requested_head,
                 generation, request_carrier_id):
-    """Codex answers with a comment when it has findings, and may answer a
-    clean review with a reaction on the request itself."""
+    """Codex answers with a comment, and sometimes with a reaction.
+
+    Its own help text says it comments when it has suggestions and reacts
+    with 👍 otherwise — but the live carrier on `#8` is a *clean* review
+    delivered as a comment, so both shapes must parse.
+    """
     base = require_baseline(base)
     for c in raw_comments:
         reject_synthetic(c)
@@ -241,25 +319,25 @@ def parse_codex(raw_comments, raw_reactions, *, base, requested_head,
     if mine:
         c = sorted(mine, key=lambda c: c.get("created_at") or "")[-1]
         body = c.get("body") or ""
-        heads = SHA40.findall(body)
         low = body.lower()
-        findings = None
-        m = re.search(r"(\d+)\s+(?:issue|finding|problem)s?", low)
-        if m:
-            findings = [{"kind": "issue"} for _ in range(int(m.group(1)))]
-        elif "no issues" in low or "no findings" in low:
-            findings = []
         return {
             "id": c["id"], "provider": "codex",
+            **author_identity(c),
             "created_at": c.get("created_at"),
             "updated_at": c.get("updated_at"), "body": body,
-            "head_claim": requested_head if requested_head in heads else None,
+            "head_claim": _codex_head_claim(body, requested_head),
+            "head_binding": "ATTESTED",
             "generation": generation,
             "new_run_ids": sorted(set(RUN_ID.findall(body))
                                   - set(base["run_ids"])),
+            # Codex carriers have no run id, so the association evidence a
+            # new comment offers is its own absence from the pre-request
+            # baseline. Recorded as a fact about the capture rather than
+            # left for the collector to assume.
+            "absent_from_baseline": True,
             "carrier_was_rewritten": False,
             "review_ran": not any(m in low for m in RATE_MARKERS),
-            "findings": findings,
+            "findings": _codex_findings(body),
         }
 
     # No comment. A reaction on our own request is the clean-review carrier.
@@ -273,10 +351,19 @@ def parse_codex(raw_comments, raw_reactions, *, base, requested_head,
         "id": f"reaction:{request_carrier_id}:{r.get('id')}",
         "provider": "codex", "created_at": r.get("created_at"),
         "updated_at": r.get("created_at"), "body": "",
-        # A reaction carries no text, so it attests no head. The head
-        # binding must come from the request it is attached to, and that is
-        # the caller's association proof, not a claim in the carrier.
+        # A reaction has no `performed_via_github_app` — confirmed against
+        # the live endpoint, which returns only `user`. So the identity a
+        # reaction can offer is the bot user, and the collector checks that
+        # rather than an App id the surface does not carry.
+        "author_app_id": None,
+        "author_user_id": (r.get("user") or {}).get("id"),
+        "author_login": (r.get("user") or {}).get("login"),
+        # A reaction carries no text, so it attests no head. The binding
+        # comes from the request it is attached to — which is a stronger
+        # fact than an attestation, since GitHub, not the provider, decides
+        # which comment a reaction is on.
         "head_claim": None,
+        "head_binding": "REQUEST_DERIVED",
         "generation": generation, "new_run_ids": [],
         "carrier_was_rewritten": False,
         "reaction_on_request_carrier": request_carrier_id,

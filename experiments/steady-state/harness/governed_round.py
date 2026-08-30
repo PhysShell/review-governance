@@ -11,27 +11,32 @@ So the order lives here, and no function below may reconstruct a missing
 prerequisite. Where a step cannot establish its input, it stops; it does
 not derive it, default it, or infer it from silence.
 
-    fresh PR / main / ruleset / carrier read
+A6f-c3 removed the last places where a caller could hand in the *input* to
+a proof instead of the proof. The driver had stopped accepting semantic
+fields and started accepting raw comments, which is the same defect with
+better manners: whoever chooses the bytes the parser sees chooses what the
+parser concludes. Every GitHub read is now made here.
+
+    durable observation of the PR, ruleset and carrier
     fresh authorization observation
-    complete ACCEPT preconditions
-    durable ACCEPT
-    re-read head, same observation and generation
-    durable provider intent
+    durable ACCEPT, gated by the store from that observation
+    driver-owned baseline capture
+    durable provider intent, bound to that capture
     ONE provider POST
-    raw GitHub provider surface
-    provider-specific normalization
+    driver-owned terminal reads, per provider surface
+    provider-specific normalization, identity preserved
     durable frozen snapshot
-    association and admissibility
+    association, causality and head binding
     provider predicate
-    bundle built from durable snapshots
-    fresh head / auth / ruleset / health / invalidation reads
+    bundle built from durable snapshots and the standing acceptance
+    request lineage re-read from the store
+    candidate-bound health
     reducer
-    PATCH the existing run
+    pre-write carrier identity, then PATCH
     full independent readback
 """
 import datetime
 
-import accept
 import auth_policy
 import collector
 import evidence
@@ -59,7 +64,9 @@ class GovernedRound:
     """One PR, one head, one generation.
 
     `read`, `post` and `patch` are injected so the driver is exercised
-    without a network. Nothing here reaches GitHub on its own initiative.
+    without a network. That injection is the transport, not the content: no
+    caller supplies a comment, a reaction or a baseline, only the function
+    that performs HTTP.
     """
 
     def __init__(self, *, repo, pr_number, read, post, auth_store,
@@ -71,48 +78,53 @@ class GovernedRound:
         self.health_sources = health_sources
         self.trace = []
 
-    # -- step 1: what is true right now -----------------------------------
-    def observe(self, *, ruleset_verified_fn, carrier_fn):
+    # -- step 1: what is true right now, written down ---------------------
+    def observe(self, *, ruleset_id, ruleset_verified_fn, carrier_fn):
+        """Read GitHub and record the reading durably.
+
+        The row is what the acceptance writer will gate over. It exists so
+        that the writer never has to take a caller's word for the draft
+        flag, the base, the ruleset or the carrier.
+        """
         status, pull = self.read("GET", f"/repos/{self.repo}/pulls/{self.pr_number}")
         if status != 200:
             return _stop("observe", "cannot read the PR")
         head = pull["head"]["sha"]
-        obs = {
-            "head_sha": head, "draft": bool(pull["draft"]),
-            "base_ref": pull["base"]["ref"], "state": pull["state"],
-            "ruleset_verified": ruleset_verified_fn(),
-            "carrier": carrier_fn(head),
-            "observed_at": utcnow(),
-        }
-        self.trace.append({"step": "observe", **obs})
-        return obs
+        carrier = carrier_fn(head)
+        row = self.rounds.record_observation(
+            repo=self.repo, pr_number=self.pr_number, head_sha=head,
+            draft=bool(pull["draft"]), base_ref=pull["base"]["ref"],
+            pr_state=pull["state"], ruleset_id=ruleset_id,
+            ruleset_verified=ruleset_verified_fn(), carrier=carrier,
+            observed_at=utcnow())
+        self.trace.append({"step": "observe",
+                           "observation_id": row["observation_id"],
+                           "head_sha": head})
+        return row
 
-    # -- step 2/3/4: authorization, preconditions, durable acceptance -----
-    def accept_candidate(self, observation, *, epoch_id, ruleset_id,
-                         open_generations=()):
+    # -- step 2/3: authorization, then a gate the store runs --------------
+    def accept_candidate(self, observation, *, epoch_id, open_generations=()):
         if observation.get("state") == STOP:
             return observation
         permission = auth_policy.evaluate(self.auth)
-        evaluation = gate_mod.evaluate(
-            repo=self.repo, pr_number=self.pr_number,
-            head_sha=observation["head_sha"], draft=observation["draft"],
-            base_ref=observation["base_ref"], ruleset_id=ruleset_id,
-            ruleset_verified=observation["ruleset_verified"],
-            carrier=observation["carrier"], permission=permission,
-            open_generations=list(open_generations))
-        if not evaluation.passed:
-            return _stop("accept", "preconditions refused",
-                         failures=evaluation.failures,
+        # Reported, never trusted: the store re-derives this from the same
+        # row before it writes anything.
+        preview = gate_mod.evaluate_observation(
+            observation, permission, open_generations=open_generations) \
+            if permission.state else None
+        try:
+            acceptance = self.rounds.record_acceptance(
+                repo=self.repo, pr_number=self.pr_number, epoch_id=epoch_id,
+                head_sha=observation["head_sha"], permission=permission,
+                observation_id=observation["observation_id"],
+                open_generations=open_generations)
+        except rounds.RoundError as exc:
+            return _stop("accept", str(exc), failures=preview,
                          authorization=permission.as_dict())
-        # The store re-checks the evaluation against what it is about to
-        # write; it cannot be handed an empty list instead.
-        acceptance = self.rounds.record_acceptance(
-            repo=self.repo, pr_number=self.pr_number, epoch_id=epoch_id,
-            head_sha=observation["head_sha"], permission=permission,
-            preconditions=evaluation)
         self.trace.append({"step": "accept", "acceptance": acceptance})
         return {"acceptance": acceptance, "permission": permission}
 
+    # -- step 4: the baseline, read and frozen before asking --------------
     def capture_baseline(self, provider):
         """Read the provider's surface and freeze it durably, before asking.
 
@@ -126,7 +138,7 @@ class GovernedRound:
         if status != 200:
             return _stop("baseline", "cannot read the provider surface; an "
                                      "unread baseline is not an empty one")
-        app = triggers.PROVIDER_APP_ID[provider]
+        app = triggers.PROVIDER_IDENTITY[provider]["app_id"]
         payload = parsers.baseline(comments or [], provider_app=app)
         row = self.snapshots.capture_baseline(
             repo=self.repo, pr_number=self.pr_number, provider=provider,
@@ -136,7 +148,7 @@ class GovernedRound:
                            "run_ids": payload["run_ids"]})
         return row
 
-    # -- step 5/6/7: intent, then exactly one request ---------------------
+    # -- step 5/6: intent bound to that capture, then one request ---------
     def request_provider(self, accepted, provider, generation, *, baseline):
         if accepted.get("state") == STOP:
             return accepted
@@ -155,38 +167,90 @@ class GovernedRound:
                 "request",
                 "the acceptance was authorised by another observation; a new "
                 "reading is a new acceptance, not a continuation")
-        intent = self.rounds.record_intent(
-            acceptance_id=acceptance["acceptance_id"], repo=self.repo,
-            pr_number=self.pr_number, provider=provider, generation=generation,
-            requested_for_head=acceptance["head_sha"], permission=permission)
+        try:
+            intent = self.rounds.record_intent(
+                acceptance_id=acceptance["acceptance_id"], repo=self.repo,
+                pr_number=self.pr_number, provider=provider,
+                generation=generation,
+                requested_for_head=acceptance["head_sha"],
+                permission=permission, baseline=baseline)
+        except rounds.RoundError as exc:
+            return _stop("request", str(exc))
         sent = triggers.send(self.post, self.rounds, request_row=intent,
                              permission=permission,
                              head_sha=acceptance["head_sha"])
         self.trace.append({"step": "request", "provider": provider,
                            "outcome": sent["state"],
-                           "baseline_id": baseline.get("baseline_id")})
+                           "baseline_id": baseline["baseline_id"]})
         if sent["state"] != rounds.SENT:
             return _stop("request", sent.get("cause", "request not sent"),
                          outcome=sent["state"])
         return {"request": sent["request"], "permission": permission}
 
-    # -- step 8/9/10/11/12: observe, normalize, freeze, admit, judge ------
-    def collect_evidence(self, sent, provider, generation, *, baseline,
-                         raw_comments, raw_reactions=()):
+    # -- step 7: the terminal surface, read here ---------------------------
+    def read_terminal_surface(self, request_row):
+        """Every byte the parser will see, fetched by the driver.
+
+        Previously `collect_evidence` took `raw_comments` and
+        `raw_reactions`. Refusing derived fields while accepting the raw
+        input to their derivation only moved the forgery: a plausible
+        GitHub comment is as good as a fabricated verdict when the caller
+        writes both.
+        """
+        status, comments = self.read(
+            "GET", f"/repos/{self.repo}/issues/{self.pr_number}/comments?per_page=100")
+        if status != 200:
+            return _stop("collect", "cannot read the provider surface")
+        reactions = []
+        if request_row["provider"] == triggers.CODEX:
+            # A clean Codex review can arrive as a reaction on our own
+            # request comment, so the exact carrier id is read, not a list
+            # of everything on the PR.
+            carrier_id = request_row["request_carrier_id"]
+            if carrier_id is None:
+                return _stop("collect", "the request has no carrier id, so "
+                                        "its reactions cannot be read")
+            r_status, raw = self.read(
+                "GET", f"/repos/{self.repo}/issues/comments/{carrier_id}/reactions")
+            if r_status != 200:
+                return _stop("collect",
+                             "cannot read the reactions on our request "
+                             "carrier; an unread surface is not an empty one")
+            reactions = raw or []
+        return {"comments": comments or [], "reactions": reactions}
+
+    # -- step 8..12: normalize, freeze, admit, judge ----------------------
+    def collect_evidence(self, sent, provider, generation):
         if sent.get("state") == STOP:
             return sent
         request_row = sent["request"]
         head = request_row["requested_for_head"]
+
+        surface = self.read_terminal_surface(request_row)
+        if surface.get("state") == STOP:
+            return surface
+
+        # The baseline comes from the request row, not from the caller: the
+        # proof that a run id is new is only a proof against the reading
+        # that preceded this request.
+        baseline = self.snapshots.baseline(request_row["baseline_id"])
+        if baseline is None:
+            return _stop("collect", "the durable baseline this request cites "
+                                    "is not in the store")
+        if baseline["baseline_digest"] != request_row["baseline_digest"]:
+            return _stop("collect", "the stored baseline does not match the "
+                                    "digest the request was bound to")
         base = {**baseline["payload"], "baseline_id": baseline["baseline_id"],
                 "read_ok": baseline["read_ok"],
                 "captured_at": baseline["captured_at"]}
+
         if provider == triggers.CODERABBIT:
             observed = parsers.parse_coderabbit(
-                raw_comments, base=base, requested_head=head,
+                surface["comments"], base=base, requested_head=head,
                 generation=generation)
         else:
             observed = parsers.parse_codex(
-                raw_comments, raw_reactions, base=base,
+                surface["comments"], surface["reactions"], base=base,
                 requested_head=head, generation=generation,
                 request_carrier_id=request_row["request_carrier_id"])
         if observed is None:
@@ -211,21 +275,25 @@ class GovernedRound:
             "requested_for_head": head, "state": "ANSWERED",
             "request_id": request_row["request_id"],
             "request_carrier_id": request_row["request_carrier_id"],
+            # Read off the durable row, so the bundle's lineage claim can be
+            # re-checked against the store rather than against itself.
+            "acceptance_id": request_row["acceptance_id"],
+            "baseline_id": request_row["baseline_id"],
             "terminal": verdict, "predicate": predicate,
             # The durable row's own digest, so the bundle cites what the
             # store actually holds rather than a second normalization.
             "snapshot_id": snap["snapshot_id"],
             "snapshot_digest": snap["snapshot_digest"],
-            "baseline_id": baseline["baseline_id"],
         }
         self.trace.append({"step": "collect", "provider": provider,
                            "snapshot_id": snap["snapshot_id"],
+                           "head_binding": verdict["head_binding"],
                            "predicate": predicate["state"]})
         return record
 
     # -- step 13..17: reduce, guard, publish, read back -------------------
-    def conclude(self, records, *, epoch_id, existing_run, auth_generation,
-                 ruleset_verified_fn, patch):
+    def conclude(self, records, *, epoch_id, existing_run, ruleset_verified_fn,
+                 patch):
         bad = [r for r in records if r.get("state") == STOP]
         if bad:
             return _stop("conclude", "a provider round did not complete",
@@ -252,19 +320,39 @@ class GovernedRound:
         permission = auth_policy.evaluate(self.auth)
         bundle = evidence.build_bundle(
             repo=self.repo, pr_number=self.pr_number, head_sha=head,
-            lineage_records=records, auth_generation=auth_generation)
-        reduction = evidence.reduce(bundle, current_head_sha=head,
-                                    permission=permission,
-                                    auth_generation=auth_generation)
+            lineage_records=records, acceptance_id=standing["acceptance_id"],
+            # From the permission, not from a parameter: a caller that could
+            # name the generation could make the bundle agree with itself.
+            auth_generation=permission.auth_generation)
+        lineage = evidence.verify_request_lineage(bundle, self.rounds, standing)
         replay = evidence.verify_against_snapshots(
             bundle, self.snapshots, predicates.evaluate)
+        reduction = evidence.reduce(bundle, current_head_sha=head,
+                                    permission=permission,
+                                    standing_acceptance=standing)
+        if reduction["verdict"] == evidence.SUCCESS and not lineage["all_bound"]:
+            return _stop("conclude",
+                         "the cited requests do not belong to the standing "
+                         "acceptance", lineage=lineage)
         if reduction["verdict"] == evidence.SUCCESS and not replay["all_reproduced"]:
             return _stop("conclude",
                          "the bundle does not replay from the durable "
                          "snapshots it cites", replay=replay)
-        health = health_mod.evaluate(self.health_sources)
-        conclusion = "success" if reduction["verdict"] == evidence.SUCCESS \
-            else "failure"
+        # Health is evaluated about *this* candidate, so "the reconciler is
+        # alive" cannot stand in for "it compared this PR at this head".
+        health = health_mod.evaluate(
+            self.health_sources,
+            candidate={"repo": self.repo, "pr_number": self.pr_number,
+                       "head_sha": head})
+        # The guard is consulted here rather than left to raise inside
+        # `publish`. A refused success is not an error condition: it is a
+        # verdict, and the carrier the gate reads must say so in red rather
+        # than stay at whatever it happened to hold.
+        checked = publish.guard(reduction=reduction, bundle=bundle,
+                                current_head_sha=head, permission=permission,
+                                health=health, existing_run=existing_run)
+        conclusion = ("success" if reduction["verdict"] == evidence.SUCCESS
+                      and checked["may_publish_success"] else "failure")
         result = publish.publish(
             patch, repo=self.repo, epoch_id=epoch_id, head_sha=head,
             conclusion=conclusion, bundle=bundle, reduction=reduction,
@@ -273,4 +361,6 @@ class GovernedRound:
         self.trace.append({"step": "conclude", "verdict": reduction["verdict"],
                            "projection": result["state"]})
         return {"bundle": bundle, "reduction": reduction, "health": health,
-                "replay": replay, "publication": result}
+                "guard": checked, "lineage": lineage, "replay": replay,
+                "publication": result,
+                "standing_acceptance": standing["acceptance_id"]}

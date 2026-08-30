@@ -77,13 +77,83 @@ def guard(*, reduction, bundle, current_head_sha, permission, health=None,
                    if n not in (health.get("observations") or {})]
         if missing:
             refusals.append(f"required health signals missing: {missing}")
+        # A health set evaluated without the candidate answers "is the
+        # reconciler alive", not "did it compare this PR at this head".
+        if not health.get("candidate_bound"):
+            refusals.append(
+                "health was evaluated without the candidate; a success needs "
+                "the reconciliation of this PR at this head, not a recent "
+                "pass over somebody else's")
+        elif (health.get("candidate") or {}).get("head_sha") != current_head_sha:
+            refusals.append(
+                "health was evaluated for another head "
+                f"({(health.get('candidate') or {}).get('head_sha')})")
         for name in sorted(health.get("not_fresh") or []):
             obs = (health.get("observations") or {}).get(name, {})
             refusals.append(
                 f"{name} health is {obs.get('state')} "
-                f"(age={obs.get('age_seconds')}s, bound={obs.get('bound')}s)")
+                f"(age={obs.get('age_seconds')}s, bound={obs.get('bound')}s)"
+                + (f": {obs['cause']}" if obs.get("cause") else ""))
     return {"may_publish_success": not refusals, "refusals": refusals,
             "authorization": permission.as_dict()}
+
+
+def preread_carrier(request, *, repo, run_id, head_sha, epoch_id,
+                    intended="success"):
+    """Prove the target is ours BEFORE mutating it.
+
+    The identity check used to run on the readback, which is a fine proof
+    of what happened and a useless guard against it: given a wrong run id
+    the Governor would PATCH somebody else's carrier and then discover, in
+    detail, that it had. A mutation guard has to precede the mutation.
+
+    Also counts the `ai/final-review` runs on the head from this App: the
+    steady-state design has exactly one applicable carrier, and patching
+    one of several would leave the gate reading a verdict nobody chose.
+
+    The starting conclusion is required only for a success, because that is
+    the transition the design is about — a pass is the promotion of the
+    exact failure the gate is already reading. Re-stating a failure on our
+    own carrier is maintenance, not a transition.
+    """
+    status, run = request("GET", f"/repos/{repo}/check-runs/{run_id}", None)
+    if status != 200 or not run:
+        return {"may_patch": False, "http_status": status,
+                "refusals": [f"cannot read check run {run_id} before writing "
+                             f"to it (status {status})"]}
+    identity = {
+        "run_id": run.get("id") == run_id,
+        "name": run.get("name") == PRODUCTION_CONTEXT,
+        "app_id": (run.get("app") or {}).get("id") == GOVERNOR_APP_ID,
+        "head_sha": run.get("head_sha") == head_sha,
+        "external_id": run.get("external_id") == epoch_id,
+    }
+    if intended in PASSING:
+        identity["conclusion_is_failure"] = run.get("conclusion") == "failure"
+    refusals = [f"pre-write identity mismatch: {k}" for k, v in identity.items()
+                if not v]
+
+    runs_status, runs = request(
+        "GET", f"/repos/{repo}/commits/{head_sha}/check-runs?per_page=100", None)
+    ours = [r for r in ((runs or {}).get("check_runs") or [])
+            if (r.get("app") or {}).get("id") == GOVERNOR_APP_ID
+            and r.get("name") == PRODUCTION_CONTEXT
+            and r.get("head_sha") == head_sha]
+    if runs_status != 200:
+        refusals.append(
+            f"cannot list the check runs on {head_sha[:12]} (status "
+            f"{runs_status}); the carrier count is unknown")
+    elif len(ours) != 1:
+        refusals.append(
+            f"{len(ours)} ai/final-review runs on this head from app "
+            f"{GOVERNOR_APP_ID}; exactly one applicable carrier is required")
+    elif ours[0].get("id") != run_id:
+        refusals.append(
+            f"the single applicable carrier on this head is {ours[0].get('id')}, "
+            f"not {run_id}")
+    return {"may_patch": not refusals, "refusals": refusals,
+            "identity": identity, "carrier_count": len(ours),
+            "http_status": status}
 
 
 def summary_for(verdict, bundle):
@@ -123,6 +193,18 @@ def publish(request, *, repo, epoch_id, head_sha, conclusion, bundle,
         if not checked["may_publish_success"]:
             raise PublishRefused(
                 "pre-publication guard refused: " + "; ".join(checked["refusals"]))
+
+    # Before any durable decision or projection, and before the write: is
+    # the thing we are about to change the thing we think it is?
+    preread = None
+    if existing_run:
+        preread = preread_carrier(request, repo=repo, run_id=existing_run,
+                                  head_sha=head_sha, epoch_id=epoch_id,
+                                  intended=conclusion)
+        if not preread["may_patch"]:
+            raise PublishRefused(
+                "pre-write carrier identity refused, nothing was written: "
+                + "; ".join(preread["refusals"]))
 
     verdict = reduction.get("verdict", "NOT_ESTABLISHED")
     decision_id = store.record_decision(
@@ -178,7 +260,7 @@ def publish(request, *, repo, epoch_id, head_sha, conclusion, bundle,
                   at=utcnow())
     return {"state": settled, "check_run_id": run_id, "intended": conclusion,
             "observed": observed, "identity": identity,
-            "write_status": write_status,
+            "preread": preread, "write_status": write_status,
             "decision_id": decision_id, "retry_performed": False,
             "app_id": ((readback or {}).get("app") or {}).get("id"),
             "head_sha": (readback or {}).get("head_sha")}

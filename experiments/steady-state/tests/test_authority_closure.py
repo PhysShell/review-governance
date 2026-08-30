@@ -1,8 +1,11 @@
-"""A6f-c2: a prerequisite is not established by supplying its shape.
+"""A6f-c2/c3: a prerequisite is not established by supplying its shape.
 
-`preconditions=[]` and a caller-built baseline dict were the same lie in
-two syntaxes. These tests are about the difference between a result and
-something that looks like one.
+`preconditions=[]`, then a hand-built `GateEvaluation`, then a caller
+baseline dict: the same lie in three syntaxes, each time one layer further
+out. A6f-c3 removed the last argument a caller could forge — the writer
+now loads a durable observation and runs the gate itself — so the rows that
+used to test "which fake result is refused" test "there is nothing to
+hand in" instead.
 """
 import datetime
 import sys
@@ -32,99 +35,89 @@ OLD_RUN = "a3d2af24-8685-49a2-9e6e-728a59d8dcd4"
 NEW_RUN = "a765cb7e-2018-4a07-b66f-66539b83f8cd"
 
 
-@pytest.fixture()
-def store(tmp_path):
-    s = rounds.RoundStore(tmp_path / "r.sqlite3")
-    yield s
-    s.close()
+from conftest import accept, record_observation  # noqa: E402
 
 
-@pytest.fixture()
-def snaps(tmp_path):
-    s = snapshots.SnapshotStore(tmp_path / "s.sqlite3")
-    yield s
-    s.close()
+# --- 1. the gate is run by the writer, over a row it loads -------------------
+
+def test_there_is_no_result_argument_left_to_forge(store, fresh):
+    """A stricter type only moved the forgery to its constructor. The
+    acceptance writer takes a pointer to a recorded reading instead."""
+    import inspect
+    params = inspect.signature(rounds.RoundStore.record_acceptance).parameters
+    assert "preconditions" not in params
+    assert "observation_id" in params
+    assert not hasattr(gate, "GateEvaluation")
+    assert not hasattr(gate, "require_matching")
 
 
-@pytest.fixture()
-def fresh(tmp_path):
-    a = auth_state.AuthStore(tmp_path / "a.sqlite3")
-    a.record(state="AUTHORIZED", auth_generation=5,
-             observed_at=datetime.datetime.now(
-                 datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-             source="refresh")
-    yield ap.evaluate(a)
-    a.close()
-
-
-def good_gate(fresh, head=A, pr=32):
-    return gate.evaluate(repo=REPO, pr_number=pr, head_sha=head, draft=False,
-                         base_ref="main", ruleset_id=21640654,
-                         ruleset_verified=True,
-                         carrier={"state": "CONFIRMED", "head_sha": head,
-                                  "check_run_id": 99104297860},
-                         permission=fresh, open_generations=[])
-
-
-# --- 1. the gate result cannot be asserted by the caller ---------------------
-
-@pytest.mark.parametrize("bogus", [[], None, ["ok"], {"failures": []}, True])
-def test_a_caller_asserted_gate_is_refused(store, fresh, bogus):
-    """`preconditions=[]` was a capability: a fresh permission plus an empty
-    list produced a durable ACCEPTED without the gate ever running."""
-    with pytest.raises(rounds.RoundError):
-        store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
-                                head_sha=A, permission=fresh,
-                                preconditions=bogus)
-    assert store.acceptances_for(REPO, 32) == []
-
-
-def test_a_real_gate_evaluation_accepts(store, fresh):
-    acc = store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
-                                  head_sha=A, permission=fresh,
-                                  preconditions=good_gate(fresh))
+def test_a_recorded_observation_accepts(store, fresh):
+    acc = accept(store, fresh)
     assert acc["state"] == rounds.ACCEPTED
+    assert acc["observation_id"]
 
 
-def test_a_gate_for_another_head_is_refused(store, fresh):
+@pytest.mark.parametrize("bogus", ["obs-invented", "", None])
+def test_an_observation_id_that_names_nothing_is_refused(store, fresh, bogus):
     with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
-                                preconditions=good_gate(fresh, head=B))
-    assert "does not match" in str(exc.value)
+                                observation_id=bogus)
+    assert "recorded reading" in str(exc.value)
+    assert store.acceptances_for(REPO, 32) == []
 
 
-def test_a_gate_for_another_pr_is_refused(store, fresh):
+def test_an_observation_of_another_head_is_refused(store, fresh):
+    obs = record_observation(store, head=B)
+    with pytest.raises(rounds.RoundError) as exc:
+        store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
+                                head_sha=A, permission=fresh,
+                                observation_id=obs["observation_id"])
+    assert "not about this acceptance" in str(exc.value)
+
+
+def test_an_observation_of_another_pr_is_refused(store, fresh):
+    obs = record_observation(store, pr=8)
     with pytest.raises(rounds.RoundError):
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
-                                preconditions=good_gate(fresh, pr=8))
+                                observation_id=obs["observation_id"])
 
 
-def test_a_gate_from_another_authorization_is_refused(store, fresh, tmp_path):
-    other = auth_state.AuthStore(tmp_path / "o.sqlite3")
-    other.record(state="AUTHORIZED", auth_generation=6,
-                 observed_at=datetime.datetime.now(
-                     datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                 source="refresh")
-    stale_gate = good_gate(ap.evaluate(other))
-    other.close()
-    with pytest.raises(rounds.RoundError):
+def test_a_carrier_bound_to_another_head_is_refused(store, fresh):
+    """`carrier_run_id` was carried into the acceptance and never checked."""
+    obs = record_observation(store, carrier_head=B)
+    with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
-                                preconditions=stale_gate)
+                                observation_id=obs["observation_id"])
+    assert "carrier_head_sha" in str(exc.value)
 
 
-def test_a_failed_gate_is_refused(store, fresh):
-    failed = gate.evaluate(repo=REPO, pr_number=32, head_sha=A, draft=True,
-                           base_ref="main", ruleset_id=1, ruleset_verified=True,
-                           carrier={"state": "CONFIRMED", "head_sha": A},
-                           permission=fresh, open_generations=[])
-    assert failed.passed is False
-    with pytest.raises(rounds.RoundError):
+@pytest.mark.parametrize("kw,fragment", [
+    ({"draft": True}, "draft"),
+    ({"base_ref": "release"}, "intended base"),
+    ({"ruleset_verified": False}, "ruleset"),
+    ({"carrier_state": "PENDING"}, "CONFIRMED failure carrier"),
+])
+def test_a_failed_gate_over_the_stored_row_is_refused(store, fresh, kw,
+                                                      fragment):
+    obs = record_observation(store, **kw)
+    with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
-                                preconditions=failed)
+                                observation_id=obs["observation_id"])
+    assert fragment in str(exc.value)
+    assert store.acceptances_for(REPO, 32) == []
+
+
+def test_a_stale_permission_is_refused_over_a_perfect_observation(store, stale):
+    obs = record_observation(store)
+    with pytest.raises(rounds.RoundError) as exc:
+        store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
+                                head_sha=A, permission=stale,
+                                observation_id=obs["observation_id"])
+    assert "STALE" in str(exc.value)
 
 
 # --- 2. baseline provenance ---------------------------------------------------
@@ -160,13 +153,37 @@ def test_a_caller_dict_is_not_a_captured_baseline():
     assert "not a captured one" in str(exc.value)
 
 
-def test_a_baseline_digest_from_another_scope_is_refused(snaps):
+def test_identical_payloads_in_two_scopes_are_two_captures(snaps):
+    """Content-addressing made these one row, so the second scope silently
+    inherited the first's provenance. A capture is an event: same bytes,
+    same digest, different reading."""
     payload = parsers.baseline([], provider_app=347564)
-    snaps.capture_baseline(repo=REPO, pr_number=32, provider="coderabbit",
-                           read_ok=True, payload=payload, captured_at="t")
-    with pytest.raises(snapshots.SnapshotError):
-        snaps.capture_baseline(repo=REPO, pr_number=8, provider="coderabbit",
-                               read_ok=True, payload=payload, captured_at="t")
+    here = snaps.capture_baseline(repo=REPO, pr_number=32,
+                                  provider="coderabbit", read_ok=True,
+                                  payload=payload, captured_at="t")
+    there = snaps.capture_baseline(repo=REPO, pr_number=8,
+                                   provider="coderabbit", read_ok=True,
+                                   payload=payload, captured_at="t")
+    assert here["baseline_id"] != there["baseline_id"]
+    assert here["baseline_digest"] == there["baseline_digest"]
+    assert (here["pr_number"], there["pr_number"]) == (32, 8)
+
+
+def test_scope_is_enforced_where_the_request_cites_the_capture(store, snaps,
+                                                               fresh):
+    """The store no longer refuses the capture, so the binding has to."""
+    acc = accept(store, fresh)
+    payload = parsers.baseline([], provider_app=347564)
+    elsewhere = snaps.capture_baseline(repo=REPO, pr_number=8,
+                                       provider="coderabbit", read_ok=True,
+                                       payload=payload,
+                                       captured_at="2020-01-01T00:00:00Z")
+    with pytest.raises(rounds.RoundError) as exc:
+        store.record_intent(acceptance_id=acc["acceptance_id"], repo=REPO,
+                            pr_number=32, provider="coderabbit", generation=1,
+                            requested_for_head=A, permission=fresh,
+                            baseline=elsewhere)
+    assert "another scope" in str(exc.value)
 
 
 # --- 3. the real CodeRabbit surface -------------------------------------------
@@ -251,6 +268,9 @@ def test_two_new_runs_are_ambiguous():
 
 # --- 4. the bundle cites the durable row --------------------------------------
 
+STANDING = {"acceptance_id": "acc-x", "head_sha": A}
+
+
 def _record(snaps, provider, head=A, body="no issues found"):
     payload = {"id": 1, "provider": provider, "body": body, "review_ran": True,
                "findings": [], "head_claim": head}
@@ -259,6 +279,7 @@ def _record(snaps, provider, head=A, body="no issues found"):
                         payload=payload, frozen_at="t")
     return {"provider": provider, "generation": 1, "requested_for_head": head,
             "state": "ANSWERED", "request_id": "req-1",
+            "acceptance_id": STANDING["acceptance_id"], "baseline_id": "base-x",
             "request_carrier_id": 500,
             "terminal": {"carrier_id": 1, "state": "ADMISSIBLE",
                          "admissible": True},
@@ -270,7 +291,8 @@ def _record(snaps, provider, head=A, body="no issues found"):
 def test_the_bundle_carries_the_stored_digest(snaps, fresh):
     rec = _record(snaps, "codex")
     b = evidence.build_bundle(repo=REPO, pr_number=32, head_sha=A,
-                              lineage_records=[rec], auth_generation=5)
+                              lineage_records=[rec], auth_generation=5,
+                              acceptance_id=STANDING["acceptance_id"])
     p = b["providers"][0]
     assert p["snapshot_id"] == rec["snapshot_id"]
     assert p["snapshot_digest"] == snaps.snapshot(rec["snapshot_id"])["snapshot_digest"]
@@ -279,6 +301,7 @@ def test_the_bundle_carries_the_stored_digest(snaps, fresh):
 def test_the_bundle_replays_from_the_durable_snapshots(snaps, fresh):
     b = evidence.build_bundle(
         repo=REPO, pr_number=32, head_sha=A, auth_generation=5,
+        acceptance_id=STANDING["acceptance_id"],
         lineage_records=[_record(snaps, "codex"),
                          _record(snaps, "coderabbit")])
     out = evidence.verify_against_snapshots(b, snaps, predicates.evaluate)
@@ -289,7 +312,8 @@ def test_a_bundle_citing_a_foreign_snapshot_does_not_replay(snaps, fresh):
     rec = _record(snaps, "codex")
     rec["snapshot_digest"] = "0" * 64
     b = evidence.build_bundle(repo=REPO, pr_number=32, head_sha=A,
-                              lineage_records=[rec], auth_generation=5)
+                              lineage_records=[rec], auth_generation=5,
+                              acceptance_id=STANDING["acceptance_id"])
     out = evidence.verify_against_snapshots(b, snaps, predicates.evaluate)
     assert out["all_reproduced"] is False
 
@@ -315,9 +339,7 @@ def test_the_runtime_invalidates_acceptances_on_a_head_move(store, fresh,
     import epochs as ep
     epochs = ep.EpochStore(tmp_path / "e.sqlite3")
     epochs.open_epoch(repo=REPO, pr_number=32, head_sha=A, opened_at="t")
-    store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
-                            head_sha=A, permission=fresh,
-                            preconditions=good_gate(fresh))
+    accept(store, fresh)
 
     def request(method, path, tok=None, body=None):
         return 200, {"check_runs": []}
@@ -333,9 +355,7 @@ def test_the_runtime_invalidates_acceptances_on_a_head_move(store, fresh,
 
 def test_a_head_returning_to_a_previous_value_does_not_resurrect(store, fresh):
     """A -> B -> A. The SHA agrees again; the acceptance does not."""
-    store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
-                            head_sha=A, permission=fresh,
-                            preconditions=good_gate(fresh))
+    accept(store, fresh)
     store.invalidate_for_head_move(REPO, 32, B)
     assert store.current_acceptance(REPO, 32, A) is None
     store.invalidate_for_head_move(REPO, 32, A)

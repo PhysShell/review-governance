@@ -301,22 +301,17 @@ def test_conclude_refuses_without_a_standing_acceptance(driver):
     A was invalidated, and evidence must not outlive the transition that
     ended it."""
     permission = ap.evaluate(driver.auth)
-    import gate as gate_mod
-    evaluation = gate_mod.evaluate(
-        repo=REPO, pr_number=32, head_sha=A, draft=False, base_ref="main",
-        ruleset_id=21640654, ruleset_verified=True,
-        carrier={"state": "CONFIRMED", "head_sha": A,
-                 "check_run_id": 99104297860},
-        permission=permission, open_generations=[])
+    from conftest import record_observation
+    obs = record_observation(driver.rounds)
     driver.rounds.record_acceptance(repo=REPO, pr_number=32, epoch_id="pe-1",
                                     head_sha=A, permission=permission,
-                                    preconditions=evaluation)
+                                    observation_id=obs["observation_id"])
     driver.rounds.invalidate_for_head_move(REPO, 32, B)
     driver.rounds.invalidate_for_head_move(REPO, 32, A)
 
     out = driver.conclude([{"requested_for_head": A, "provider": "codex",
                             "generation": 1, "state": "ANSWERED"}],
-                          epoch_id="pe-1", existing_run=1, auth_generation=5,
+                          epoch_id="pe-1", existing_run=1,
                           ruleset_verified_fn=lambda: True,
                           patch=lambda *a, **k: (_ for _ in ()).throw(
                               AssertionError("nothing may be published")))

@@ -1,17 +1,23 @@
-"""The ACCEPT gate as a result that carries its own evaluation.
+"""The ACCEPT gate, run by the writer over a durable observation.
 
-`preconditions=[]` was a capability. A caller with a fresh permission could
-hand the durable store an empty list and get an ACCEPTED row without the
-gate ever running — the store checked that the list was empty, which is
-not the same as checking that anything evaluated it.
+Three versions of this defect now:
 
-So the gate returns an object that cannot be fabricated by supplying
-something list-shaped: it names the exact repo, PR, head, carrier run,
-ruleset and authorization observation it was computed against, and the
-store re-checks that those match the row it is about to write.
+    preconditions=[]        an empty list was accepted as proof of a gate
+    GateEvaluation(...)     the class had a public constructor, so the
+                            caller could build a passing result by hand
+                            and `require_matching` — which compared only
+                            repo, PR, head and authorization — took it
 
-    A prerequisite is not established merely because the caller supplies
-    an object shaped like its result.
+The lesson the second version taught is that no object can be the boundary.
+A caller that can construct the evidence type can construct the evidence,
+and a stricter type just moves the forgery one constructor along.
+
+So there is no caller-supplied result any more. The durable writer is
+handed an **observation id**, loads the row the driver wrote when it read
+GitHub, and runs the gate itself over those stored fields. What the caller
+supplies is a pointer to something already recorded, not a conclusion; the
+carrier run and ruleset that the previous version carried but never
+re-checked are now inputs the writer reads for itself.
 """
 import datetime
 
@@ -27,71 +33,67 @@ def utcnow():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-class GateEvaluation:
-    """Only `gate.evaluate` produces one, and it records what it saw."""
-
-    __slots__ = ("repo", "pr_number", "head_sha", "carrier_run_id",
-                 "ruleset_id", "auth_observation_id", "auth_generation",
-                 "failures", "evaluated_at")
-
-    def __init__(self, **kw):
-        for k in self.__slots__:
-            setattr(self, k, kw.get(k))
-
-    @property
-    def passed(self):
-        return self.failures == []
-
-    def as_dict(self):
-        return {k: getattr(self, k) for k in self.__slots__}
+REQUIRED_OBSERVATION_FIELDS = (
+    "observation_id", "repo", "pr_number", "head_sha", "draft", "base_ref",
+    "ruleset_id", "ruleset_verified", "carrier_state", "carrier_head_sha",
+    "carrier_run_id", "observed_at")
 
 
-def evaluate(*, repo, pr_number, head_sha, draft, base_ref, ruleset_id,
-             ruleset_verified, carrier, permission, open_generations=()):
-    """Run the full ACCEPT gate and bind the result to what it saw."""
-    permission = auth_policy.require(permission)
-    failures = accept.preconditions(
-        repo=repo, pr_number=pr_number, head_sha=head_sha, draft=draft,
-        base_current=base_ref == "main", ruleset_verified=ruleset_verified,
-        carrier=carrier, permission=permission,
-        open_generations=list(open_generations))
-    return GateEvaluation(
-        repo=repo, pr_number=pr_number, head_sha=head_sha,
-        carrier_run_id=(carrier or {}).get("check_run_id")
-                       or (carrier or {}).get("run_id"),
-        ruleset_id=ruleset_id,
-        auth_observation_id=permission.observation_id,
-        auth_generation=permission.auth_generation,
-        failures=failures, evaluated_at=utcnow())
+def evaluate_observation(observation, permission, *, open_generations=()):
+    """Run the gate over a stored observation row.
 
-
-def require_matching(evaluation, *, repo, pr_number, head_sha, permission):
-    """What the durable store calls before writing anything.
-
-    A gate evaluated for another PR, another head or another authorization
-    observation is not this acceptance's gate, however green it looks.
+    Returns the failure list. Callers do not get to construct this; the
+    durable writer calls it, and the row it reads is one the driver wrote
+    from an actual GitHub read.
     """
-    if not isinstance(evaluation, GateEvaluation):
+    missing = [f for f in REQUIRED_OBSERVATION_FIELDS if f not in observation]
+    if missing:
         raise GateError(
-            f"expected a GateEvaluation produced by gate.evaluate, got "
-            f"{type(evaluation).__name__}: an empty list is not evidence "
-            "that the gate ran")
+            f"observation row is incomplete: {missing}; a partial reading "
+            "cannot be gated")
+    permission = auth_policy.require(permission)
+    return accept.preconditions(
+        repo=observation["repo"], pr_number=observation["pr_number"],
+        head_sha=observation["head_sha"], draft=bool(observation["draft"]),
+        base_current=observation["base_ref"] == "main",
+        ruleset_verified=bool(observation["ruleset_verified"]),
+        carrier={"state": observation["carrier_state"],
+                 "head_sha": observation["carrier_head_sha"],
+                 "check_run_id": observation["carrier_run_id"]},
+        permission=permission, open_generations=list(open_generations))
+
+
+def require_scope(observation, *, repo, pr_number, head_sha):
+    """The stored observation must be about the row being written.
+
+    Checked separately from the gate itself because an observation of
+    another PR can pass every precondition and still be the wrong evidence.
+    """
     mismatches = []
-    if evaluation.repo != repo:
+    if observation["repo"] != repo:
         mismatches.append("repo")
-    if int(evaluation.pr_number) != int(pr_number):
+    if int(observation["pr_number"]) != int(pr_number):
         mismatches.append("pr_number")
-    if evaluation.head_sha != head_sha:
+    if observation["head_sha"] != head_sha:
         mismatches.append("head_sha")
-    if evaluation.auth_observation_id != permission.observation_id:
-        mismatches.append("auth_observation_id")
-    if evaluation.auth_generation != permission.auth_generation:
-        mismatches.append("auth_generation")
+    if observation["carrier_head_sha"] != head_sha:
+        mismatches.append("carrier_head_sha")
     if mismatches:
         raise GateError(
-            f"the gate evaluation does not match this acceptance: "
+            f"the stored observation is not about this acceptance: "
             f"{mismatches}")
-    if not evaluation.passed:
-        raise GateError("acceptance refused by preconditions: "
-                        + "; ".join(evaluation.failures))
-    return evaluation
+    return observation
+
+
+def preview(*, repo, pr_number, head_sha, draft, base_ref, ruleset_id,
+            ruleset_verified, carrier, permission, open_generations=()):
+    """What the gate would say, for reporting only.
+
+    Deliberately returns a plain list and is named so that nothing reads as
+    an authorisation. The durable path never consults this.
+    """
+    return accept.preconditions(
+        repo=repo, pr_number=pr_number, head_sha=head_sha, draft=draft,
+        base_current=base_ref == "main", ruleset_verified=ruleset_verified,
+        carrier=carrier, permission=auth_policy.require(permission),
+        open_generations=list(open_generations))
