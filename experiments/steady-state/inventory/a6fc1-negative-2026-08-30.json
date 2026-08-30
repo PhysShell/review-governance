@@ -1,0 +1,41 @@
+{
+  "stage": "A6f-c1 live negative qualification",
+  "auth": {
+    "stored": "AUTHORIZED",
+    "derived": "STALE",
+    "age_seconds": 43569
+  },
+  "accept_preconditions": {
+    "failures": [
+      "authorization permission is STALE (age=43569s): observation is 43569s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+    ]
+  },
+  "durable_accept": {
+    "written": false,
+    "reason": "acceptance refused by preconditions: authorization permission is STALE (age=43569s): observation is 43569s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+  },
+  "acceptance_rows": 0,
+  "provider_request_rows": 0,
+  "bypass_attempt": {
+    "blocked": true,
+    "reason": "acceptance refused: authorization permission is STALE"
+  },
+  "parser_on_real_32": {
+    "comments_seen": 1,
+    "answer_attributable_to_a_request": true
+  },
+  "health": {
+    "all_fresh": false,
+    "not_fresh": [
+      "reconciliation",
+      "watchdog"
+    ],
+    "states": {
+      "runtime": "FRESH",
+      "reconciliation": "UNREADABLE",
+      "watchdog": "ABSENT"
+    }
+  },
+  "provider_network_writes": 0,
+  "production_success_writes": 0
+}

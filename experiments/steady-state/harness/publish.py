@@ -24,6 +24,7 @@ run decides (A3b-c4).
 import datetime
 
 import auth_policy
+import health as health_mod
 
 PRODUCTION_CONTEXT = "ai/final-review"
 GOVERNOR_APP_ID = 4669438
@@ -66,9 +67,21 @@ def guard(*, reduction, bundle, current_head_sha, permission, health=None,
             "no existing scoped failure run to patch; a success is a "
             "transition of the carrier the gate already consults, never a "
             "second carrier on the same head")
-    for name, fresh in sorted((health or {}).items()):
-        if not fresh:
-            refusals.append(f"{name} health is not fresh")
+    # An absent health set used to pass exactly like a healthy one.
+    if health is None:
+        refusals.append(
+            "no runtime health evaluation supplied; absence of a signal is "
+            "not the presence of a healthy one")
+    else:
+        missing = [n for n in health_mod.REQUIRED
+                   if n not in (health.get("observations") or {})]
+        if missing:
+            refusals.append(f"required health signals missing: {missing}")
+        for name in sorted(health.get("not_fresh") or []):
+            obs = (health.get("observations") or {}).get(name, {})
+            refusals.append(
+                f"{name} health is {obs.get('state')} "
+                f"(age={obs.get('age_seconds')}s, bound={obs.get('bound')}s)")
     return {"may_publish_success": not refusals, "refusals": refusals,
             "authorization": permission.as_dict()}
 

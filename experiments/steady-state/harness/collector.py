@@ -73,12 +73,45 @@ def admissibility(carrier, request_row, *, head_sha, generation):
             "code": UNASSOCIATED,
             "detail": "the request has no carrier id, so nothing can be "
                       "shown to be its answer"})
-    elif carrier.get("in_reply_to_id") is not None and \
-            carrier["in_reply_to_id"] != request_row["request_carrier_id"]:
-        reasons.append({"code": UNASSOCIATED,
-                        "detail": "carrier replies to a different request"})
+    else:
+        # Association must be established positively. The previous version
+        # only checked `in_reply_to_id` when it was not None — and issue
+        # comments have no such field at all, confirmed against the live
+        # API, so that branch never executed. Right bot, later timestamp
+        # and right SHA was enough to be admitted.
+        reply_to = carrier.get("in_reply_to_id")
+        new_runs = carrier.get("new_run_ids")
+        reaction_on = carrier.get("reaction_on_request_carrier")
+        if reply_to is not None:
+            if reply_to != request_row["request_carrier_id"]:
+                reasons.append({"code": UNASSOCIATED,
+                                "detail": "carrier replies to another request"})
+        elif reaction_on is not None:
+            if reaction_on != request_row["request_carrier_id"]:
+                reasons.append({"code": UNASSOCIATED,
+                                "detail": "reaction is on another request"})
+        elif new_runs:
+            if not carrier.get("carrier_was_rewritten") and \
+                    carrier.get("created_at", "") <= request_row["intent_recorded_at"]:
+                reasons.append({
+                    "code": UNASSOCIATED,
+                    "detail": "a carrier older than the intent that was not "
+                              "rewritten cannot be this request's answer"})
+        else:
+            reasons.append({
+                "code": UNASSOCIATED,
+                "detail": "no association evidence: no reply id, no reaction "
+                          "on our request, and no provider run identifier "
+                          "absent from the pre-request baseline"})
 
-    if int(carrier.get("generation", generation)) != int(generation):
+    observed_generation = carrier.get("generation")
+    if observed_generation is None:
+        # Defaulting to the expected value turned missing evidence into a
+        # match. Absence is UNRESOLVED, never agreement.
+        reasons.append({"code": WRONG_GENERATION,
+                        "detail": "carrier carries no generation binding; "
+                                  "absence is not a match"})
+    elif int(observed_generation) != int(generation):
         reasons.append({"code": WRONG_GENERATION,
                         "detail": "carrier belongs to another generation"})
 

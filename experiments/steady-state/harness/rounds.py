@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS provider_requests (
     generation          INTEGER NOT NULL,
     requested_for_head  TEXT NOT NULL,
     auth_observation_id INTEGER,
+    auth_generation     INTEGER,
     intent_recorded_at  TEXT NOT NULL,
     request_carrier_id  INTEGER,
     request_outcome     TEXT NOT NULL,
@@ -105,7 +106,23 @@ class RoundStore:
 
     # --- acceptances ------------------------------------------------------
     def record_acceptance(self, *, repo, pr_number, epoch_id, head_sha,
-                          permission, accepted_at=None):
+                          permission, preconditions, accepted_at=None):
+        """`preconditions` is the full ACCEPT gate result, not a courtesy.
+
+        Previously this wrote a durable ACCEPTED after checking only the
+        SHA length and the permission, so `accept.preconditions()` could
+        return REFUSED and a durable acceptance could be written anyway.
+        The gate and the record were two mechanisms that never had to
+        agree. Requiring the evaluated failure list here makes bypassing it
+        impossible rather than discouraged.
+        """
+        if preconditions is None:
+            raise RoundError(
+                "an acceptance requires the evaluated precondition result; "
+                "this store will not assume the gate was run")
+        if preconditions:
+            raise RoundError(
+                "acceptance refused by preconditions: " + "; ".join(preconditions))
         if len(head_sha or "") != 40:
             raise RoundError("an acceptance must name the full head")
         if not getattr(permission, "permits_action", False):
@@ -180,17 +197,23 @@ class RoundStore:
             raise RoundError(
                 "a request may only be made for the head its acceptance is "
                 "about")
+        if not getattr(permission, "permits_action", False):
+            raise RoundError(
+                f"request intent refused: authorization permission is "
+                f"{getattr(permission, 'state', 'MISSING')}")
         at = intent_recorded_at or utcnow()
         rid = _ident("req-", {"acc": acceptance_id, "provider": provider,
                               "gen": int(generation)})
         self.conn.execute(
             "INSERT INTO provider_requests (request_id, acceptance_id, repo,"
             " pr_number, provider, generation, requested_for_head,"
-            " auth_observation_id, intent_recorded_at, request_carrier_id,"
-            " request_outcome) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " auth_observation_id, auth_generation, intent_recorded_at,"
+            " request_carrier_id, request_outcome)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (rid, acceptance_id, repo, int(pr_number), provider,
              int(generation), requested_for_head,
-             getattr(permission, "observation_id", None), at, None,
+             getattr(permission, "observation_id", None),
+             getattr(permission, "auth_generation", None), at, None,
              INTENT_RECORDED))
         self.conn.commit()
         return self.request(rid)

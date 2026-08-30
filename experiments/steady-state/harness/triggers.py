@@ -91,6 +91,16 @@ def send(post, store, *, request_row, permission, head_sha):
             "unrecoverable")
     if request_row["requested_for_head"] != head_sha:
         raise TriggerRefused("request row is for another head")
+    # The durable record says which observation authorised this request.
+    # Posting under a different one would make the provenance a sentence
+    # about an authorization that did not license the mutation.
+    if permission.observation_id != request_row.get("auth_observation_id") or \
+            permission.auth_generation != request_row.get("auth_generation"):
+        raise TriggerRefused(
+            f"permission does not match the recorded intent: intent was "
+            f"authorised by observation {request_row.get('auth_observation_id')} "
+            f"generation {request_row.get('auth_generation')}, this call "
+            f"carries {permission.observation_id}/{permission.auth_generation}")
 
     provider = request_row["provider"]
     path = (f"/repos/{request_row['repo']}/issues/"

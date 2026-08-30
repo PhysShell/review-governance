@@ -215,7 +215,9 @@ def test_fresh_permits_the_success_guard(store):
     checked = publish.guard(reduction={"verdict": "SUCCESS", "head_sha": H},
                             bundle={"head_sha": H}, current_head_sha=H,
                             permission=fresh(store), existing_run=99104297860,
-                            health={"runtime": True, "reconciliation": True})
+                            health={"observations": {n: {"state": "FRESH"} for n in
+                                    ("runtime", "reconciliation", "watchdog")},
+                                   "all_fresh": True, "not_fresh": []})
     assert checked["may_publish_success"] is True
 
 

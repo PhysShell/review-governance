@@ -50,7 +50,8 @@ def fresh(tmp_path):
 
 def accept(store, fresh, head=A):
     return store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
-                                   head_sha=head, permission=fresh)
+                                   head_sha=head, permission=fresh,
+                                   preconditions=[])
 
 
 # --- 1. durable acceptance -----------------------------------------------------
@@ -217,7 +218,11 @@ def test_a_stale_permission_stops_the_trigger_before_the_network(store, fresh,
 def carrier(**over):
     base = {"id": 900, "created_at": "2026-08-29T14:00:00Z",
             "performed_via_github_app": {"id": 347564},
-            "head_claim": A, "body": "Review completed", "generation": 1}
+            "head_claim": A, "body": "Review completed", "generation": 1,
+            # association evidence is now required rather than assumed:
+            # a run id absent from the pre-request baseline
+            "new_run_ids": ["a3d2af24-8685-49a2-9e6e-728a59d8dcd4"],
+            "carrier_was_rewritten": True}
     base.update(over)
     return base
 
@@ -441,7 +446,14 @@ def _ok(fresh):
                               auth_generation=5)
 
 
-HEALTH = {"runtime": True, "reconciliation": True, "watchdog": True}
+def _health(all_fresh=True, not_fresh=()):
+    return {"observations": {n: {"state": "FRESH" if n not in not_fresh
+                                 else "STALE", "age_seconds": 5, "bound": 120}
+                             for n in ("runtime", "reconciliation", "watchdog")},
+            "all_fresh": all_fresh, "not_fresh": list(not_fresh)}
+
+
+HEALTH = _health()
 
 
 def test_success_may_not_create_a_second_carrier(fresh):
@@ -458,7 +470,7 @@ def test_success_may_not_create_a_second_carrier(fresh):
                          ["runtime", "reconciliation", "watchdog"])
 def test_stale_runtime_health_refuses_success(fresh, stale_component):
     b, red = _ok(fresh)
-    health = {**HEALTH, stale_component: False}
+    health = _health(all_fresh=False, not_fresh=[stale_component])
     checked = publish.guard(reduction=red, bundle=b, current_head_sha=A,
                             permission=fresh, health=health,
                             existing_run=99104297860)

@@ -440,7 +440,9 @@ def test_the_positive_path_exists_end_to_end(store, fresh):
                         head_sha=H8, conclusion="success", bundle=bundle,
                         reduction=reduction, current_head_sha=H8,
                         permission=fresh, store=store, existing_run=77,
-                        health={"runtime": True})
+                        health={"observations": {n: {"state": "FRESH"} for n in
+                                 ("runtime", "reconciliation", "watchdog")},
+                                "all_fresh": True, "not_fresh": []})
     assert r["state"] == "CONFIRMED" and r["observed"] == "success"
     assert store.projection(e["epoch_id"])["state"] == "CONFIRMED"
 
