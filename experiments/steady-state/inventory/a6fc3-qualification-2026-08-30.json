@@ -1,0 +1,199 @@
+{
+  "auth": {
+    "stored": "AUTHORIZED",
+    "derived": "STALE",
+    "age_seconds": 66245,
+    "auth_generation": 5,
+    "note": "STALE is derived, never stored; no /user probe"
+  },
+  "observation": {
+    "observation_id": "obs-c20b2dd4149bff2b9303a572",
+    "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+    "draft": false,
+    "carrier_run_id": 99104297860,
+    "ruleset_id": 21640654
+  },
+  "durable_accept": {
+    "written": false,
+    "reason": "acceptance refused by preconditions: authorization permission is STALE (age=66246s): observation is 66246s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+  },
+  "caller_asserted_gate": {
+    "record_acceptance_signature": [
+      "accepted_at",
+      "epoch_id",
+      "head_sha",
+      "observation_id",
+      "open_generations",
+      "permission",
+      "pr_number",
+      "repo",
+      "self"
+    ],
+    "gate_has_result_class": false,
+    "obs-invented": "refused: no observation 'obs-invented': an acceptance is written from a recorde",
+    "None": "refused: no observation None: an acceptance is written from a recorded reading,",
+    "": "refused: no observation '': an acceptance is written from a recorded reading, n"
+  },
+  "baseline": {
+    "baseline_id": "base-f3f886f8a3d62620a4dcb17f",
+    "baseline_digest": "868a2e037089b686b587761023e539db45690b9016668d19b46c1b29cfd7ebf4",
+    "read_ok": true,
+    "captured_at": "2026-08-30T07:12:57Z",
+    "run_ids": [
+      "36be3b65-5991-4dd1-8da9-de0e54baf434"
+    ],
+    "second_capture_is_a_new_event": true
+  },
+  "parser_on_real_32": {
+    "comments_seen": 1,
+    "answer_attributable_to_a_request": false,
+    "uncaptured_baseline": "refused: no baseline capture: an unobserved surface cannot be distinguished from an empty one"
+  },
+  "provider_identity": {
+    "codex": {
+      "app_id": 1144995,
+      "bot_user_id": 199175422,
+      "login": "chatgpt-codex-connector[bot]"
+    },
+    "coderabbit": {
+      "app_id": 347564,
+      "bot_user_id": 136622811,
+      "login": "coderabbitai[bot]"
+    }
+  },
+  "retired_conflated_constant": true,
+  "health": {
+    "all_fresh": true,
+    "not_fresh": [],
+    "candidate_bound": true,
+    "states": {
+      "runtime": "FRESH",
+      "reconciliation": "FRESH",
+      "watchdog": "FRESH"
+    },
+    "reconciliation_provenance": {
+      "comparisons_attempted": 2,
+      "comparisons_performed": 2,
+      "all_compared": true,
+      "per_pr": [
+        {
+          "pr_number": 8,
+          "scope_state": "RESOLVED",
+          "stored_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+          "github_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+          "comparison_performed": true,
+          "drift_detected": false
+        },
+        {
+          "pr_number": 32,
+          "scope_state": "RESOLVED",
+          "stored_head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+          "github_head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+          "comparison_performed": true,
+          "drift_detected": false
+        }
+      ],
+      "source": "steady-state runtime, scoped reconciliation"
+    },
+    "watchdog_provenance": {
+      "last_watchdog_poll": "2026-08-30T07:12:31Z",
+      "watchdog_polls": 33333,
+      "source": "edge /healthz, value produced by the watchdog process",
+      "edge_reachable": true
+    },
+    "without_candidate_refuses_success": true
+  },
+  "observation_rows": 2,
+  "acceptance_rows": 0,
+  "provider_request_rows": 0,
+  "live": {
+    "32": {
+      "head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+      "governor_runs": [
+        {
+          "id": 99104297860,
+          "conclusion": "failure"
+        }
+      ],
+      "governor_comments": []
+    },
+    "8": {
+      "head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+      "governor_runs": [
+        {
+          "id": 99099324325,
+          "conclusion": "failure"
+        }
+      ],
+      "governor_comments": []
+    }
+  },
+  "provider_network_writes": 0,
+  "production_success_writes": 0,
+  "reads_performed": 10,
+  "writes_performed": 0,
+  "stage": "A6f-c3 end-to-end authority closure",
+  "deployment": {
+    "commit": "fe4c8db164c56dd314cba9711d583c21fe31fa3d",
+    "working_tree_clean": true,
+    "governor_runtime_started_at": "Sun 2026-08-30 07:10:51 UTC",
+    "governor_sentinel_started_at": "Sun 2026-08-30 07:10:51 UTC",
+    "rounds_store_migrated": "acceptances/provider_requests were empty and were recreated with the A6f-c3 columns; a populated legacy table would have refused to open"
+  },
+  "end_to_end_offline_round": {
+    "test": "experiments/steady-state/tests/test_end_to_end_round.py",
+    "path": [
+      "observe -> durable observation",
+      "gate run by the writer",
+      "driver-owned baseline capture",
+      "intent bound to that capture",
+      "one POST via fake transport",
+      "driver-owned terminal reads",
+      "parser preserving provider identity",
+      "provider-specific causal collector",
+      "durable snapshot",
+      "request <-> standing acceptance re-read from the store",
+      "snapshot replay",
+      "candidate-bound health",
+      "pre-write carrier identity",
+      "PATCH",
+      "full readback"
+    ],
+    "reaches_success": true
+  },
+  "real_surface_regressions": {
+    "fixture": "experiments/steady-state/fixtures/live-provider-carriers.json",
+    "coderabbit_sticky_5349895008": {
+      "created_at": "2026-08-20T01:03:30Z",
+      "updated_at": "2026-08-29T11:10:50Z",
+      "skip_run": "a3d2af24-8685-49a2-9e6e-728a59d8dcd4",
+      "review_run": "a765cb7e-2018-4a07-b66f-66539b83f8cd",
+      "attests_head": "8aeafa9c28b9679c6fec660101f37e1f8bd994bd",
+      "verdict": "ADMISSIBLE + ADVISORY_POSITIVE for the head it reviewed, WRONG_HEAD for the current head of #8"
+    },
+    "codex_comment_5462308601": {
+      "body_shape": "clean review as a comment, `**Reviewed commit:**` with a 10-character abbreviation",
+      "verdict": "ADMISSIBLE + ADVISORY_POSITIVE through prefix attestation"
+    },
+    "codex_reaction_shape": "ADMISSIBLE through REQUEST_DERIVED head binding"
+  },
+  "defects_found_by_reading_the_live_surface": [
+    "PROVIDER_APP_ID[codex] held the bot user id 199175422; the Codex App is 1144995, so the identity check was false on every real Codex carrier",
+    "SHA40 never matched `**Reviewed commit:** `2d83487039``, so head_claim was None on every real Codex comment",
+    "\"Didn't find any major issues\" matched no clean-review phrase"
+  ],
+  "tests": {
+    "total": 477,
+    "failed": 0
+  },
+  "forbidden_actions_not_taken": [
+    "fresh /user probe",
+    "live ACCEPT",
+    "Codex",
+    "CodeRabbit",
+    "SUCCESS patch",
+    "HEAD mutation on #32",
+    "merge",
+    "ruleset or App changes"
+  ]
+}
