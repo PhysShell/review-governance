@@ -1,0 +1,77 @@
+{
+  "stage": "A6g-c2 second-round preregistration and CodeRabbit association closure",
+  "verdict": "PASS",
+  "association_rule": {
+    "handle": "radioGroupId -> triggering comment id, in CodeRabbit's own markup",
+    "semantics_derived_from_corpus": {
+      "pr_8": "sticky updated 2026-08-29T11:10:50Z names 5461445560 (09:03:24Z); a later command at 11:57:33Z did not rewrite the sticky and is not named",
+      "pr_32": "sticky names 5469066573 (our request); the Codex request posted 11s later is not named",
+      "conclusion": "the handle tracks the trigger whose review produced the content the carrier is currently showing"
+    },
+    "constraints": {
+      "C1_identity": "author App id == 347564",
+      "C2_exactly_one_and_ours": "exactly one NEW triggering id, equal to our request carrier",
+      "C3_differential": "absent from the pre-request baseline's triggering ids; the provider began naming us",
+      "C4_causal": "carrier rewritten after the recorded intent"
+    },
+    "not_transitive": "a carrier without the handle is not associated because a sibling carrier has it",
+    "invocation_hash": "NOT_DERIVED; reaches no decision",
+    "does_not_retro_qualify_a6g": true
+  },
+  "baseline_extended": [
+    "triggering_ids",
+    "all_triggering_ids"
+  ],
+  "preregistration": "experiments/steady-state/SECOND-ROUND.md",
+  "tests": {
+    "total": 539,
+    "failed": 0
+  },
+  "authorized_actions_taken": [
+    "offline code",
+    "tests",
+    "control-plane commit"
+  ],
+  "actions_not_taken": [
+    "new disposable PR",
+    "fresh /user",
+    "live ACCEPT",
+    "CodeRabbit POST",
+    "Codex POST",
+    "SUCCESS",
+    "#8"
+  ],
+  "live_carriers_under_the_rule": {
+    "command_response_5469070667": {
+      "association": null,
+      "admissible": false,
+      "content": "NOT_POSITIVE",
+      "findings": 1,
+      "names_any_trigger": []
+    },
+    "sticky_5462558501": {
+      "names": [
+        5469066573
+      ],
+      "reviewable_content": null
+    }
+  },
+  "live_state_unchanged_since_cleanup": {
+    "pr32": {
+      "state": "closed",
+      "merged": false
+    },
+    "pr8": {
+      "state": "open",
+      "head": "2d8348703924c7470ba82f525cafc9afe720aee2"
+    },
+    "main": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "standing_acceptances": [],
+    "provider_posts": 0,
+    "success_writes": 0
+  },
+  "deployment": {
+    "commit": "fc632bddf378b3c4efcb7252fcfba8b2e33dce27",
+    "working_tree_clean": false
+  }
+}

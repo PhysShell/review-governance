@@ -1,0 +1,59 @@
+{
+  "step": "A5b step 4 ruleset",
+  "repo": "PhysShell/evm-from-scratch",
+  "name": "ai-final-review-enforcement",
+  "started_at": "2026-08-27T09:34:11Z",
+  "create": {
+    "state": "CREATED",
+    "attempted_at": "2026-08-27T09:34:12Z",
+    "ruleset_id": 21640654,
+    "create_ok": true,
+    "request_body": {
+      "name": "ai-final-review-enforcement",
+      "target": "branch",
+      "enforcement": "disabled",
+      "bypass_actors": [],
+      "conditions": {
+        "ref_name": {
+          "include": [
+            "refs/heads/main"
+          ],
+          "exclude": []
+        }
+      },
+      "rules": [
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "required_status_checks": [
+              {
+                "context": "ai/final-review",
+                "integration_id": 4669438
+              }
+            ],
+            "strict_required_status_checks_policy": true,
+            "do_not_enforce_on_create": false
+          }
+        }
+      ]
+    },
+    "create_response": "not trusted"
+  },
+  "verify_disabled": {
+    "ruleset_id": 21640654,
+    "observed_enforcement": "disabled",
+    "POLICY_HASH": {
+      "observed": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+      "expected": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+      "match": true
+    },
+    "FULL_HASH": {
+      "observed": "3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7",
+      "expected": "3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7",
+      "which": "DISABLED_RULESET_HASH",
+      "match": true
+    },
+    "state": "VERIFIED"
+  },
+  "verdict": "HALTED_BEFORE_ACTIVATION"
+}

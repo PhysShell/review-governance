@@ -1,0 +1,112 @@
+{
+  "artifact": "FirstGovernedReviewCandidate-v1",
+  "repo": "PhysShell/evm-from-scratch",
+  "observed_at": "2026-08-29T11:56:53Z",
+  "gate": {
+    "state": "VERIFIED_ACTIVE",
+    "ruleset_id": 21640654,
+    "POLICY_HASH": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+    "ACTIVE_RULESET_HASH": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+    "verification": {
+      "ruleset_id": 21640654,
+      "observed_enforcement": "active",
+      "POLICY_HASH": {
+        "observed": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+        "expected": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+        "match": true
+      },
+      "FULL_HASH": {
+        "observed": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+        "expected": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+        "which": "ACTIVE_RULESET_HASH",
+        "match": true
+      },
+      "state": "VERIFIED"
+    }
+  },
+  "inventory": [
+    {
+      "repo": "PhysShell/evm-from-scratch",
+      "base": "main",
+      "pr_number": 8,
+      "head_sha": "2d8348703924c7470ba82f525cafc9afe720aee2",
+      "head_ref": "claude/p-038-evm-from-scratch-0l73bd",
+      "draft": false,
+      "title": "E1-v5 closes as history \u2014 STOP_PROTOCOL_POSTFREEZE_CHAIN_NONCONFORMANT",
+      "eligible": true,
+      "excluded_because": []
+    },
+    {
+      "repo": "PhysShell/evm-from-scratch",
+      "base": "main",
+      "pr_number": 12,
+      "head_sha": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+      "head_ref": "claude/ai-final-review-governor-pilot-vohn85",
+      "draft": true,
+      "title": "ai-final-review shadow governor \u2014 non-enforcing pilot, measured provider contracts",
+      "eligible": false,
+      "excluded_because": [
+        "draft"
+      ]
+    }
+  ],
+  "selection_cause": null,
+  "pr_number": 8,
+  "base_ref": "main",
+  "head_sha": "2d8348703924c7470ba82f525cafc9afe720aee2",
+  "draft": false,
+  "carrier": {
+    "state": "ABSENT",
+    "runs_on_head": []
+  },
+  "base_update": {
+    "method": "merge main -> candidate branch (POST /merges), no rebase, no force-push",
+    "rebase_used": false,
+    "force_push_used": false,
+    "pre_update_head": "8aeafa9c28b9679c6fec660101f37e1f8bd994bd",
+    "main_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "old_head_to_new": {
+      "status": "ahead",
+      "ahead_by": 14,
+      "behind_by": 0,
+      "merge_base": "8aeafa9c28b9679c6fec660101f37e1f8bd994bd"
+    },
+    "main_to_new": {
+      "status": "ahead",
+      "ahead_by": 11,
+      "behind_by": 0,
+      "merge_base": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08"
+    },
+    "old_head_is_ancestor": true,
+    "main_is_ancestor": true,
+    "merge_base_is_main": true,
+    "history_rewritten": false
+  },
+  "provider_round": "NOT_STARTED",
+  "candidate_state": "ESTABLISHED",
+  "runtime_readiness": {
+    "steady_state_carrier_producer": false,
+    "production_success_projection": false,
+    "provider_trigger_lineage": false,
+    "pr_scoped_decision_history": false,
+    "production_carrier_producers": [
+      "bootstrap.py"
+    ],
+    "note": "structural, and self-excluded: this module is the checker and must not count as a capability it is looking for",
+    "missing": [
+      "steady_state_carrier_producer",
+      "production_success_projection",
+      "provider_trigger_lineage",
+      "pr_scoped_decision_history"
+    ],
+    "complete": false
+  },
+  "accept_candidate": "HOLD",
+  "cause": "PRODUCTION_RUNTIME_INCOMPLETE",
+  "missing_capabilities": [
+    "steady_state_carrier_producer",
+    "production_success_projection",
+    "provider_trigger_lineage",
+    "pr_scoped_decision_history"
+  ]
+}

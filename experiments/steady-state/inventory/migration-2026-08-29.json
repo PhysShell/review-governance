@@ -1,0 +1,30 @@
+{
+  "step": "A6a legacy migration",
+  "source_artifact": "93dd8e5b91bc81a0ce769df70078808265e276290e1692f65fc55f815d8edceb",
+  "source_file": "experiments/cutover/inventory/frozen-2026-08-26.json",
+  "legacy_store": "/home/nixos/.config/review-governor/decisions.sqlite3",
+  "legacy_store_modified": false,
+  "results": [
+    {
+      "legacy_epoch": "bootstrap-8aeafa9c28b9",
+      "state": "MAPPED",
+      "epoch_id": "pe-809ef2141630fb0000d180bf",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr_number": 8,
+      "head_sha": "8aeafa9c28b9679c6fec660101f37e1f8bd994bd",
+      "justification": "full head 8aeafa9c28b9679c6fec660101f37e1f8bd994bd matches exactly one inventory entry, PR #8"
+    },
+    {
+      "legacy_epoch": "bootstrap-e29621f54a63",
+      "state": "MAPPED",
+      "epoch_id": "pe-99321fff6f97b5dccfe72054",
+      "repo": "PhysShell/evm-from-scratch",
+      "pr_number": 12,
+      "head_sha": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+      "justification": "full head e29621f54a63b50db4afb77b608d6c3a4d533812 matches exactly one inventory entry, PR #12"
+    }
+  ],
+  "mapped": 2,
+  "unmapped": 0,
+  "note": "mapping is by full head SHA against a commit-bound inventory; positional pairing is not used and would not be accepted as justification"
+}

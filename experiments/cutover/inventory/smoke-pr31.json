@@ -1,0 +1,53 @@
+{
+  "step": "A5b step 5 negative production smoke test",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 31,
+  "started_at": "2026-08-27T11:45:51Z",
+  "fixture_predicate": {
+    "probe_head": "c6de158e23dc72a7b557d7ea4d107c3b0b7378de",
+    "probe_base_ref": "main",
+    "main_sha_before": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "merge_base": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "base_is_main": true,
+    "base_fresh": true,
+    "production_runs_on_probe_head": [],
+    "check_absent": true,
+    "ruleset_active": true,
+    "ruleset_hashes_match": true,
+    "ruleset_verification": {
+      "ruleset_id": 21640654,
+      "observed_enforcement": "active",
+      "POLICY_HASH": {
+        "observed": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+        "expected": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+        "match": true
+      },
+      "FULL_HASH": {
+        "observed": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+        "expected": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+        "which": "ACTIVE_RULESET_HASH",
+        "match": true
+      },
+      "state": "VERIFIED"
+    },
+    "valid": true
+  },
+  "attempt": {
+    "at": "2026-08-27T11:45:56Z",
+    "merged_reported": false,
+    "response": {
+      "message": "Repository rule violations found\n\nRequired status check \"ai/final-review\" is expected.\n\n",
+      "documentation_url": "https://docs.github.com/rest/pulls/pulls#merge-a-pull-request",
+      "status": "405"
+    },
+    "stderr": "gh: Repository rule violations found\n\nRequired status check \"ai/final-review\" is expected.\n\n (HTTP 405)"
+  },
+  "main_sha_after": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+  "probe_head_after": "c6de158e23dc72a7b557d7ea4d107c3b0b7378de",
+  "probe_merged": false,
+  "merge_state_status": "BLOCKED",
+  "corroborating_only": "mergeStateStatus is recorded as corroboration; the causality rests on the freshness predicate, which was established before the attempt",
+  "verdict": "NEGATIVE_SMOKE_TEST_BLOCKED",
+  "counted": true,
+  "finished_at": "2026-08-27T11:45:58Z"
+}

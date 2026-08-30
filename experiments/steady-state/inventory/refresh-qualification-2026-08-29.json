@@ -1,0 +1,27 @@
+{
+  "old_generation": 4,
+  "new_generation": 5,
+  "refresh_requests": 1,
+  "retry_performed": false,
+  "credential_persisted": true,
+  "generation_readback": 5,
+  "credential_validated": true,
+  "old_secrets_retained": false,
+  "history_entries": 6,
+  "stored_auth_fact": {
+    "state": "AUTHORIZED",
+    "auth_generation": 5,
+    "source": "refresh",
+    "observed_at": "2026-08-29T12:48:51Z"
+  },
+  "derived_permission": {
+    "state": "FRESH_AUTHORIZED",
+    "observation_id": 5,
+    "auth_generation": 5,
+    "observed_at": "2026-08-29T12:48:51Z",
+    "age_seconds": 18,
+    "source": "refresh",
+    "evaluated_at": "2026-08-29T12:49:08Z",
+    "cause": null
+  }
+}

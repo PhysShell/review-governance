@@ -28,6 +28,7 @@ import urllib.request
 from pathlib import Path
 
 import alerting
+import ruleset as ruleset_mod
 import governor
 
 CONFIG_DIR = Path(os.environ.get(
@@ -79,17 +80,39 @@ def _raise_or_hold(notifier, args, state, cause, severity, detail):
 # --- individual checks -------------------------------------------------------
 
 def check_reconciliation(args, notifier):
+    """Recent *and* actually reconciled.
+
+    Two things were wrong here. The field was `last_complete_sweep_at`,
+    written by the legacy reconcile loop the A6e cut-in replaced — so after
+    the cut-in this read a name nobody produces and would have paged about
+    a loop that was running perfectly. And freshness alone says a process
+    ran, not that it compared anything: a pass in which every PR was
+    UNRESOLVED writes a timestamp exactly as recent as a pass that
+    compared them all.
+
+    So the age is taken from the field the producer writes, and a pass that
+    performed no scoped comparison is NOT_COMPARED rather than HEALTHY.
+    """
     path = Path(args.health_file)
     if not path.exists():
         state = {"state": "NOT_REPORTED", "age_seconds": None}
     else:
         health = json.loads(path.read_text() or "{}")
-        age = age_of(health.get("last_complete_sweep_at"))
-        state = {"state": "HEALTHY" if age is not None and age <= args.reconciliation_max_age
-                          else "STALE",
+        age = age_of(health.get("last_complete_pass_at"))
+        attempted = health.get("comparisons_attempted")
+        performed = health.get("comparisons_performed")
+        if age is None or age > args.reconciliation_max_age:
+            verdict = "STALE"
+        elif health.get("all_compared") is not True:
+            verdict = "NOT_COMPARED"
+        else:
+            verdict = "HEALTHY"
+        state = {"state": verdict,
                  "age_seconds": None if age is None else round(age, 1),
-                 "last_complete_sweep_at": health.get("last_complete_sweep_at"),
-                 "pr_count": health.get("pr_count")}
+                 "last_complete_pass_at": health.get("last_complete_pass_at"),
+                 "comparisons_attempted": attempted,
+                 "comparisons_performed": performed,
+                 "pr_count": attempted}
     if notifier:
         if state["state"] == "HEALTHY":
             notifier.clear("reconciliation_stale", repo=args.repo,
@@ -99,6 +122,46 @@ def check_reconciliation(args, notifier):
                 notifier, args, state["state"], "reconciliation_stale",
                 alerting.CRITICAL,
                 f"{state['state']} age={state['age_seconds']}")
+    return state
+
+
+def check_ruleset_bypass(args, notifier):
+    """The one precondition the runtime identity cannot observe.
+
+    A6f-c4 made the governed round read the production ruleset for itself,
+    and found that the Governor App's view omits `bypass_actors` entirely
+    while the owner's returns `[]`. So "no actor may bypass this rule" is
+    not establishable by the process that publishes verdicts, and pinning a
+    hash over the smaller object it *can* see would have quietly renamed the
+    gap rather than closing it.
+
+    It is checked here instead, with the owner credential, by a process
+    that cannot publish anything — which is the same separation that keeps
+    ruleset administration out of the App in the first place.
+    """
+    ok, body = ruleset_mod.gh("api", f"repos/{args.repo}/rulesets/{args.ruleset_id}")
+    if not ok or not isinstance(body, dict):
+        state = {"state": "UNREADABLE",
+                 "cause": "cannot read the ruleset with the owner credential"}
+    elif "bypass_actors" not in body:
+        # The owner token returns the key. Its absence means this check ran
+        # with an identity that cannot see it, which is not an empty list.
+        state = {"state": "UNOBSERVABLE",
+                 "cause": "this credential cannot see bypass_actors"}
+    else:
+        actors = body["bypass_actors"] or []
+        state = {"state": "EMPTY" if not actors else "POPULATED",
+                 "bypass_actors": len(actors),
+                 "enforcement": body.get("enforcement")}
+    if notifier:
+        if state["state"] == "EMPTY":
+            notifier.clear("ruleset_bypass_present", repo=args.repo,
+                           detected_at=utcnow())
+        else:
+            state["alert"] = _raise_or_hold(
+                notifier, args, state["state"], "ruleset_bypass_present",
+                alerting.CRITICAL,
+                f"{state['state']} {state.get('bypass_actors', '')}")
     return state
 
 
@@ -199,12 +262,36 @@ def check_edge_receiver(args, notifier):
     return state, body
 
 
+def write_watchdog_health(path, healthz, at):
+    """The watchdog's own record, carried across rather than restated.
+
+    `last_watchdog_poll` originates in the edge database, written by the
+    watchdog process itself on the host that runs it. The primary copies
+    that value with its provenance; it does not offer an opinion about
+    whether its watchdog seems well, which is not a thing the primary can
+    know.
+    """
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    poll = (healthz or {}).get("last_watchdog_poll")
+    Path(path).write_text(json.dumps({
+        "last_complete_pass_at": poll,
+        "watchdog_polls": (healthz or {}).get("watchdog_polls"),
+        "source": "edge /healthz, value produced by the watchdog process",
+        "relayed_by": "primary sentinel",
+        "relayed_at": at,
+        "edge_reachable": healthz is not None,
+    }, indent=2) + "\n")
+
+
 def sweep(args, notifier):
     receiver, healthz = check_edge_receiver(args, notifier)
+    if healthz is not None:
+        write_watchdog_health(args.watchdog_health, healthz, utcnow())
     return {"checked_at": utcnow(),
             "reconciliation": check_reconciliation(args, notifier),
             "installation_token": check_installation_token(args, notifier),
             "user_authorization": check_auth_state(args, notifier),
+            "ruleset_bypass": check_ruleset_bypass(args, notifier),
             "edge_receiver": receiver,
             "edge_watchdog": check_watchdog(args, notifier, healthz)}
 
@@ -231,6 +318,11 @@ def main():
                     default=str(CONFIG_DIR / "reconciliation-health.json"))
     ap.add_argument("--auth-state-file",
                     default=str(CONFIG_DIR / "auth-state.json"))
+    ap.add_argument("--watchdog-health",
+                    default=str(CONFIG_DIR / "watchdog-health.json"))
+    ap.add_argument("--ruleset-id", type=int, default=21640654,
+                    help="the production ruleset whose bypass list the "
+                         "Governor App is not permitted to see")
     ap.add_argument("--alerts-db", default=str(CONFIG_DIR / "alerts.sqlite3"))
     ap.add_argument("--reconciliation-max-age", type=int,
                     default=RECONCILIATION_MAX_AGE)

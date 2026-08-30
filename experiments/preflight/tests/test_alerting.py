@@ -210,8 +210,14 @@ def test_stale_reconciliation_pages(tmp_path, notifier):
     import sentinel
 
     health = tmp_path / "health.json"
+    # The field the producer writes. A6f-c2 moved the reconciliation signal
+    # from the legacy reconcile loop to the runtime's own pass; reading the
+    # retired name would make this test pass on an absent field rather than
+    # on an old timestamp, which is not what it claims to check.
     health.write_text(json.dumps(
-        {"last_complete_sweep_at": "2020-01-01T00:00:00Z", "pr_count": 2}))
+        {"last_complete_pass_at": "2020-01-01T00:00:00Z",
+         "comparisons_attempted": 2, "comparisons_performed": 2,
+         "all_compared": True}))
 
     class Args:
         repo = REPO
@@ -477,8 +483,14 @@ def test_startup_grace_never_suppresses_real_staleness(notifier, tmp_path):
     import sentinel
 
     health = tmp_path / "health.json"
+    # The field the producer writes. A6f-c2 moved the reconciliation signal
+    # from the legacy reconcile loop to the runtime's own pass; reading the
+    # retired name would make this test pass on an absent field rather than
+    # on an old timestamp, which is not what it claims to check.
     health.write_text(json.dumps(
-        {"last_complete_sweep_at": "2020-01-01T00:00:00Z", "pr_count": 2}))
+        {"last_complete_pass_at": "2020-01-01T00:00:00Z",
+         "comparisons_attempted": 2, "comparisons_performed": 2,
+         "all_compared": True}))
 
     class Args:
         repo = REPO

@@ -1,0 +1,39 @@
+{
+  "artifact": "A5bInventoryFreeze-v1",
+  "protocol_head": "5a0842ed86addff03f1c4d114248960a46510d5d",
+  "repo": "PhysShell/evm-from-scratch",
+  "base": "main",
+  "observed_at": "2026-08-26T16:02:57Z",
+  "observation_finished_at": "2026-08-26T16:02:59Z",
+  "quiescent_during_observation": true,
+  "inventory": [
+    {
+      "repo": "PhysShell/evm-from-scratch",
+      "base": "main",
+      "pr_number": 8,
+      "head_sha": "8aeafa9c28b9679c6fec660101f37e1f8bd994bd",
+      "head_ref": "claude/p-038-evm-from-scratch-0l73bd",
+      "draft": false,
+      "title": "E1-v5 closes as history \u2014 STOP_PROTOCOL_POSTFREEZE_CHAIN_NONCONFORMANT"
+    },
+    {
+      "repo": "PhysShell/evm-from-scratch",
+      "base": "main",
+      "pr_number": 12,
+      "head_sha": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+      "head_ref": "claude/ai-final-review-governor-pilot-vohn85",
+      "draft": true,
+      "title": "ai-final-review shadow governor \u2014 non-enforcing pilot, measured provider contracts"
+    }
+  ],
+  "pr_count": 2,
+  "production_context": "ai/final-review",
+  "production_context_runs_per_head": {
+    "8aeafa9c28b9679c6fec660101f37e1f8bd994bd": [],
+    "e29621f54a63b50db4afb77b608d6c3a4d533812": []
+  },
+  "production_context_unused": true,
+  "heads_with_unreadable_check_runs": [],
+  "frozen": true,
+  "inventory_hash": "93dd8e5b91bc81a0ce769df70078808265e276290e1692f65fc55f815d8edceb"
+}

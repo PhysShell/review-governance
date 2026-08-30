@@ -1,0 +1,78 @@
+{
+  "note": "Captured verbatim during A6g. The CodeRabbit answer to a review request, in the shape it actually returned: a reply comment with no Run ID label, no reviewed range, and no actionable-comment count. The sticky it also rewrote lost the Run ID label it had carried a minute earlier.",
+  "captured_at": "2026-08-30T14:00:00Z",
+  "repo": "PhysShell/evm-from-scratch",
+  "pr_number": 32,
+  "request_carriers": {
+    "coderabbit": 5469066573,
+    "codex": 5469066806
+  },
+  "carriers": [
+    {
+      "id": 5462558501,
+      "body": "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->\n<!-- review_stack_entry_start -->\n\n[![Review Change Stack](https://storage.googleapis.com/coderabbit_public_assets/review-stack-in-coderabbit-ui.svg)](https://app.coderabbit.ai/change-stack/PhysShell/evm-from-scratch/pull/32)\n\n<!-- review_stack_entry_end -->\n<!-- walkthrough_start -->\n\n<details>\n<summary>\ud83d\udcdd Walkthrough</summary>\n\n## Walkthrough\n\nThe change adds `clamp_gas`, which rejects negative limits, converts negative requests to zero, and caps other requests at the configured limit.\n\n### Changes\n\n**Gas clamping**\n\n|Layer / File(s)|Summary|\n|---|---|\n|**Implement gas request clamping** <br> `governor/pilot/a6e-probe.py`|Adds `clamp_gas(requested, limit)`. The function raises `ValueError` for negative limits, returns `0` for negative requests, and caps other requests at `limit`.|\n\n**Estimated code review effort:** 1 (Trivial) | ~3 minutes\n\n<!-- final_review_risk_start -->\n**Merge Risk:** _\ud83d\udfe1 Moderate_ \u00b7 up to `7ad19`\n\nThe new gas-clamping behavior is not connected to an executable qualification path or regression test, so the change does not currently demonstrate the intended fail-closed runtime behavior. Merge should wait until the function is wired in and its boundary cases are tested.\n<!-- final_review_risk_end -->\n\n</details>\n\n<!-- walkthrough_end -->\n<!-- pre_merge_checks_walkthrough_start -->\n\n<details>\n<summary>\ud83d\udea5 Pre-merge checks | \u2705 5</summary>\n\n<details>\n<summary>\u2705 Passed checks (5 passed)</summary>\n\n|         Check name         | Status   | Explanation                                                                                                                                                                                   |\n| :------------------------: | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n|      Description Check     | \u2705 Passed | Check skipped - CodeRabbit\u2019s high-level summary is enabled.                                                                                                                                   |\n|         Title check        | \u2705 Passed | The title clearly identifies the A6e disposable steady-state probe and states that the change must not merge. This matches the stated pull request objective and the added a6e-probe.py file. |\n|     Docstring Coverage     | \u2705 Passed | Docstring coverage is 100.00% which is sufficient. The required threshold is 80.00%. Docstring coverage is scoped to functions touched by this diff. Analyzed 1 functions across 1 files.     |\n|     Linked Issues check    | \u2705 Passed | Check skipped because no linked issues were found for this pull request.                                                                                                                      |\n| Out of Scope Changes check | \u2705 Passed | Check skipped because no linked issues were found for this pull request.                                                                                                                      |\n\n</details>\n\n</details>\n\n<!-- pre_merge_checks_walkthrough_end -->\n<!-- finishing_touch_checkbox_start -->\n\n<details>\n<summary>\u2728 Finishing Touches \ud83d\udca1 1</summary>\n\n<!-- finishing_touch_suggestion:fix_ci -->\n<details open>\n<summary>\ud83d\udee0\ufe0f Fix failing CI checks \ud83d\udca1</summary>\n\n- [ ] <!-- {\"checkboxId\": \"6d21cfe8-ec3f-40e2-9222-b8318b64d3b0\", \"radioGroupId\": \"fix-ci-output-choice-group-5469066573\"} -->   Create stacked PR\n- [ ] <!-- {\"checkboxId\": \"9f0d24fb-b419-4f01-baf0-8b26b6424f34\", \"radioGroupId\": \"fix-ci-output-choice-group-5469066573\"} -->   Commit on current branch\n\n</details>\n<details>\n<summary>\ud83d\udcdd Generate docstrings</summary>\n\n- [ ] <!-- {\"checkboxId\":\"7962f53c-55bc-4827-bfbf-6a18da830691\"} --> Create stacked PR\n- [ ] <!-- {\"checkboxId\":\"3e1879ae-f29b-4d0d-8e06-d12b7ba33d98\"} --> Commit on current branch\n\n</details>\n<details>\n<summary>\ud83e\uddea Generate unit tests (beta)</summary>\n\n- [ ] <!-- {\"checkboxId\": \"f47ac10b-58cc-4372-a567-0e02b2c3d479\", \"radioGroupId\": \"utg-output-choice-group-5469066573\"} -->   Create PR with unit tests\n- [ ] <!-- {\"checkboxId\": \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\", \"radioGroupId\": \"utg-output-choice-group-5469066573\"} -->   Commit unit tests in branch `probe/a6e-steady-state`\n\n</details>\n\n</details>\n\n<!-- finishing_touch_checkbox_end -->\n<!-- tips_start -->\n\n---\n\nThanks for using [CodeRabbit](https://coderabbit.ai?utm_source=oss&utm_medium=github&utm_campaign=PhysShell/evm-from-scratch&utm_content=32)! It's free for OSS, and your support helps us grow. If you like it, consider giving us a shout-out.\n\n<details>\n<summary>\u2764\ufe0f Share</summary>\n\n- [X](https://twitter.com/intent/tweet?text=I%20just%20used%20%40coderabbitai%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20the%20proprietary%20code.%20Check%20it%20out%3A&url=https%3A//coderabbit.ai)\n- [Mastodon](https://mastodon.social/share?text=I%20just%20used%20%40coderabbitai%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20the%20proprietary%20code.%20Check%20it%20out%3A%20https%3A%2F%2Fcoderabbit.ai)\n- [Reddit](https://www.reddit.com/submit?title=Great%20tool%20for%20code%20review%20-%20CodeRabbit&text=I%20just%20used%20CodeRabbit%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20proprietary%20code.%20Check%20it%20out%3A%20https%3A//coderabbit.ai)\n- [LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fcoderabbit.ai&mini=true&title=Great%20tool%20for%20code%20review%20-%20CodeRabbit&summary=I%20just%20used%20CodeRabbit%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20proprietary%20code)\n\n</details>\n\n\n<sub>Comment `@coderabbitai help` to get the list of available commands.</sub>\n\n<!-- tips_end -->",
+      "user": {
+        "login": "coderabbitai[bot]",
+        "id": 136622811
+      },
+      "performed_via_github_app": {
+        "id": 347564
+      },
+      "created_at": "2026-08-29T13:01:15Z",
+      "updated_at": "2026-08-30T13:50:25Z"
+    },
+    {
+      "id": 5469070667,
+      "body": "<!-- This is an auto-generated reply by CodeRabbit -->\n<!-- CodeRabbit review command invocation: v2:32df4e14a54a34489f6064b41b34adf5415ffbce454b30123e6ca2e567806562 -->\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nset -euo pipefail\n\ntarget='7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52'\n\necho '== Checked-out commit =='\ngit rev-parse HEAD\necho\n\necho '== Requested commit =='\ngit show --no-patch --format='commit=%H%nparents=%P%nauthor=%an <%ae>%ndate=%cI%nsubject=%s' \"$target\"\necho\n\necho '== Changed files and status against parent =='\ngit diff-tree --no-commit-id --name-status -r \"$target\"\necho\n\necho '== Diff statistics against parent =='\ngit diff-tree --no-commit-id --stat -r \"$target\"\necho\n\necho '== Exact patch against parent =='\ngit diff --format=fuller \"${target}^\" \"$target\"\n```\n\nLength of output: 2213\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nset -euo pipefail\n\necho '== New-file outline =='\nast-grep outline governor/pilot/a6e-probe.py --items all --view expanded\necho\n\necho '== Files under governor/pilot =='\nfd -t f . governor/pilot 2>/dev/null | sort || true\necho\n\necho '== Gas-related definitions and calls =='\nrg -n -i -C 4 \\\n  '(def\\s+\\w*(gas|clamp|limit)\\w*\\s*\\(|\\b(clamp_gas|gas_limit|gas limit|requested gas|gas request)\\b)' \\\n  -g '*.py' .\necho\n\necho '== Probe and qualification references =='\nrg -n -i -C 3 \\\n  '(a6e|steady-state|steady state|qualification|probe|governor/pilot)' \\\n  -g '*.py' -g '*.md' -g '*.yml' -g '*.yaml' .\n```\n\nLength of output: 19634\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nset -euo pipefail\n\necho '== Repository root files =='\nfd -t f -d 1 . | sort\necho\n\necho '== Automation and Python configuration files =='\nfd -t f -i '(^|/)(.*(workflow|action|pytest|pyproject|tox|nox|setup|requirements|makefile|gitignore).*)$' . \\\n  -E .git -E node_modules -E dist -E build | sort\necho\n\necho '== Workflow outline and relevant configuration content =='\nwhile IFS= read -r file; do\n  echo \"--- $file\"\n  case \"$file\" in\n    *.yml|*.yaml)\n      sed -n '1,260p' \"$file\"\n      ;;\n    *)\n      sed -n '1,220p' \"$file\"\n      ;;\n  esac\ndone < <(\n  fd -t f \\( -i -g '*workflow*' -o -i -g '*action*' -o -i -g 'pyproject.toml' \\\n    -o -i -g 'pytest.ini' -o -i -g 'tox.ini' -o -i -g 'noxfile.py' \\\n    -o -i -g 'setup.cfg' -o -i -g 'setup.py' -o -i -g 'requirements*.txt' \\\n    -o -i -g 'Makefile' -o -i -g '.gitignore' \\) . -E .git -E node_modules -E dist -E build | sort\n)\necho\n\necho '== Execution/discovery references =='\nrg -n -i -C 4 \\\n  '(governor/pilot|a6e-probe|\\.py\\b|pytest|python[[:space:]]|ruff|mypy|compileall)' \\\n  -g '*.yml' -g '*.yaml' -g '*.toml' -g '*.ini' -g '*.cfg' -g 'Makefile' -g '*.md' .\n```\n\nLength of output: 1756\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nset -euo pipefail\n\necho '== Tracked repository paths relevant to automation and Python =='\ngit ls-tree -r --name-only HEAD |\n  grep -Ei '(^|/)(\\.github/|.*\\.(yml|yaml|toml|ini|cfg)$|Makefile$|makefile$|setup\\.py$|noxfile\\.py$|tox\\.ini$|pytest\\.ini$|requirements[^/]*\\.txt$|\\.gitignore$)' \\\n  || true\necho\n\necho '== Tracked references to the fixture and Python execution =='\ngit grep -n -i -E \\\n  'governor/pilot|a6e-probe|(^|[^[:alnum:]_])python([[:space:]]|$)|pytest|ruff|mypy|compileall' \\\n  HEAD -- \\\n  '*.yml' '*.yaml' '*.toml' '*.ini' '*.cfg' 'Makefile' 'makefile' '*.md' \\\n  || true\necho\n\necho '== Contents of tracked automation/configuration files =='\nwhile IFS= read -r file; do\n  echo \"--- $file\"\n  git show \"HEAD:$file\"\n  echo\ndone <<'EOF'\nEOF\n\ngit ls-tree -r --name-only HEAD |\n  grep -Ei '(^\\.github/.*\\.(yml|yaml)$|(^|/)(pyproject\\.toml|pytest\\.ini|tox\\.ini|setup\\.cfg|setup\\.py|noxfile\\.py|requirements[^/]*\\.txt|Makefile|makefile|\\.gitignore)$)' |\n  while IFS= read -r file; do\n    echo \"--- $file\"\n    git show \"HEAD:$file\"\n    echo\n  done\n```\n\nLength of output: 1858\n\n---\n\n</details>\n\n`@PhysShell` I reviewed commit `7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52` only.\n\n**Finding \u2014 Line 11:** `clamp_gas` is not imported, invoked, or discovered by any tracked workflow or test configuration. The repository has no existing `governor/pilot` integration, and no automation references `a6e-probe.py`. Therefore, this commit only adds an unreachable function. It does not prove that the deployed steady-state runtime creates or uses a fail-closed carrier without manual harness invocation. This fails the stated A6e probe objective.\n\n<details>\n<summary>\u2705 Action performed</summary>\n\nReview finished.\n\n> Note: CodeRabbit is an incremental review system and does not re-review already reviewed commits. This command is applicable only when automatic reviews are paused.\n\n</details>",
+      "user": {
+        "login": "coderabbitai[bot]",
+        "id": 136622811
+      },
+      "performed_via_github_app": {
+        "id": 347564
+      },
+      "created_at": "2026-08-30T13:49:16Z",
+      "updated_at": "2026-08-30T13:50:31Z"
+    },
+    {
+      "id": 5469076456,
+      "body": "Codex Review: Didn't find any major issues. Already looking forward to the next diff.\n\n**Reviewed commit:** `7ad19f5e72`\n\n<details> <summary>\u2139\ufe0f About Codex in GitHub</summary>\n<br/>\n\n[Your team has set up Codex to review pull requests in this repo](https://chatgpt.com/codex/cloud/settings/general). Reviews are triggered when you\n- Open a pull request for review\n- Mark a draft as ready\n- Comment \"@codex review\".\n\nIf Codex has suggestions, it will comment; otherwise it will react with \ud83d\udc4d.\n\n\n\n\nCodex can also answer questions or update the PR. Try commenting \"@codex address that feedback\".\n            \n</details>",
+      "user": {
+        "login": "chatgpt-codex-connector[bot]",
+        "id": 199175422
+      },
+      "performed_via_github_app": {
+        "id": 1144995
+      },
+      "created_at": "2026-08-30T13:50:30Z",
+      "updated_at": "2026-08-30T13:50:30Z"
+    },
+    {
+      "id": 5469066573,
+      "body": "@coderabbitai review\n\nRequested by the Governor for head `7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52`.\nThis request is bound to that exact commit; an answer about any other commit is not evidence for it.",
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143
+      },
+      "performed_via_github_app": {
+        "id": 4669438
+      },
+      "created_at": "2026-08-30T13:48:27Z",
+      "updated_at": "2026-08-30T13:48:27Z"
+    },
+    {
+      "id": 5469066806,
+      "body": "@codex review\n\nRequested by the Governor for head `7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52`.\nThis request is bound to that exact commit; an answer about any other commit is not evidence for it.",
+      "user": {
+        "login": "PhysShell",
+        "id": 45852143
+      },
+      "performed_via_github_app": {
+        "id": 4669438
+      },
+      "created_at": "2026-08-30T13:48:29Z",
+      "updated_at": "2026-08-30T13:48:29Z"
+    }
+  ],
+  "reactions_on_codex_request": []
+}

@@ -1,0 +1,44 @@
+{
+  "ruleset_id": 21640654,
+  "flip": {
+    "flip_ok": true,
+    "flipped_at": "2026-08-27T09:38:55Z",
+    "flip_response": "not trusted"
+  },
+  "pre_flip_policy_hash": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+  "before": {
+    "ruleset_id": 21640654,
+    "observed_enforcement": "disabled",
+    "POLICY_HASH": {
+      "observed": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+      "expected": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+      "match": true
+    },
+    "FULL_HASH": {
+      "observed": "3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7",
+      "expected": "3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7",
+      "which": "DISABLED_RULESET_HASH",
+      "match": true
+    },
+    "state": "VERIFIED"
+  },
+  "after": {
+    "ruleset_id": 21640654,
+    "observed_enforcement": "active",
+    "POLICY_HASH": {
+      "observed": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+      "expected": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+      "match": true
+    },
+    "FULL_HASH": {
+      "observed": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+      "expected": "3f1ddecaa689b56a0e3c59e7a0b3d11864c5d38b983131c61bae391e90292a20",
+      "which": "ACTIVE_RULESET_HASH",
+      "match": true
+    },
+    "state": "VERIFIED"
+  },
+  "retry_performed": false,
+  "policy_hash_unchanged_across_flip": true,
+  "state": "CONFIRMED"
+}

@@ -55,6 +55,14 @@ def canonical_ruleset() -> dict:
                     {"context": PRODUCTION_CONTEXT,
                      "integration_id": GOVERNOR_APP_ID}],
                 "strict_required_status_checks_policy": True,
+                # A5b-r2. GitHub materialises this field on every ruleset it
+                # stores, and it is policy-bearing: at True, branch creation
+                # is exempted from the rule even when the required check
+                # would otherwise forbid it. The canonical object being
+                # silent about it was a gap in the reviewed policy, not
+                # noise from the API — so it is pinned explicitly rather
+                # than filtered out of the comparison.
+                "do_not_enforce_on_create": False,
             },
         }],
     }

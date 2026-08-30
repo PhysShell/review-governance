@@ -162,7 +162,11 @@ def authorization_row(auth_db, conclusion):
     try:
         row = store.current()
         if conclusion in ("success", "neutral", "skipped"):
-            auth_state.require_triggers_permitted(store)
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2]
+                                   / "steady-state" / "harness"))
+            import auth_policy
+            auth_state.require_triggers_permitted(
+                store, permission=auth_policy.evaluate(store))
         return dict(row) if row else None
     finally:
         store.close()

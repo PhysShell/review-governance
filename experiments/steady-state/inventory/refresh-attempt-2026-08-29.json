@@ -1,0 +1,38 @@
+{
+  "action": "refresh",
+  "attempted": true,
+  "recorded": true,
+  "observation_id": 5,
+  "preflight": {
+    "credential_present": true,
+    "refresh_token_present": true,
+    "client_credentials_present": true,
+    "destination_writable": true,
+    "auth_store_reachable": true,
+    "old_auth_generation": 4,
+    "started_at": "2026-08-29T12:48:50Z",
+    "ready": true
+  },
+  "state": "AUTHORIZED",
+  "http_status": 200,
+  "old_auth_generation": 4,
+  "new_auth_generation": 5,
+  "readback": {
+    "generation_on_disk": 5,
+    "generation_matches": true,
+    "access_token_matches": true,
+    "history_entries": 6,
+    "history_holds_no_secrets": true
+  },
+  "authenticated_as": "PhysShell",
+  "retry_performed": false,
+  "projection": {
+    "state": "AUTHORIZED",
+    "auth_generation": 5,
+    "observed_at": "2026-08-29T12:48:51Z",
+    "source": "refresh",
+    "note": "projection of the authoritative auth store; read by the sentinel for alerting only. Never a policy authority, and never read back into the store."
+  },
+  "permits_triggers": true,
+  "demands_invalidation": false
+}

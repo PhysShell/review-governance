@@ -1,0 +1,45 @@
+{
+  "stage": "A6e production composition cut-in",
+  "deployed_commit": "c05cf2d4cc9beb74537783c7a52f6a33b50eaaa5",
+  "worktree_clean_at_deploy": true,
+  "commit_at": "2026-08-29T12:58:34Z",
+  "runtime_started_at": "2026-08-29T12:58:52Z",
+  "legacy_reconcile": {
+    "active": false,
+    "enabled": false
+  },
+  "negative_control_pr8": {
+    "head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+    "carriers": 1,
+    "run": 99099324325,
+    "duplicate_writes": 0,
+    "action": "ADOPTED"
+  },
+  "disposable": {
+    "pr": 32,
+    "PROBE_HEAD_A": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+    "merge_base": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "opened_at": "2026-08-29T13:01:09Z",
+    "carrier_created_at": "2026-08-29T13:01:12Z",
+    "seconds_to_automatic_carrier": 3,
+    "created_by": "deployed runtime, no manual harness invocation",
+    "run": 99104297860,
+    "app_id": 4669438,
+    "conclusion": "failure",
+    "verdict": "NOT_ESTABLISHED",
+    "count": 1,
+    "epoch": "pe-5a41d21a944c13836e1cc6ff",
+    "projection": "CONFIRMED"
+  },
+  "reconciliation": {
+    "scope_state": "RESOLVED",
+    "stored_pr": 32,
+    "stored_head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+    "github_head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+    "comparison_performed": true,
+    "drift_detected": false
+  },
+  "accept_candidate": "NOT_STARTED",
+  "provider_requests": 0,
+  "production_success": "NOT_PUBLISHED"
+}

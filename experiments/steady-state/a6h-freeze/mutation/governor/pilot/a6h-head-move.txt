@@ -1,0 +1,8 @@
+A6h invalidation probe.
+
+This file exists only to move the disposable pull request's head after a
+confirmed SUCCESS on HEAD_A, so that the SHA binding can be shown to make
+the old passing check inapplicable immediately.
+
+Its content was frozen in review-governance before the candidate branch
+existed, so the mutation cannot have been chosen in response to a review.

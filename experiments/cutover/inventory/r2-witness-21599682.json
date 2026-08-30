@@ -1,0 +1,35 @@
+{
+  "observed_normalized": {
+    "name": "ai-final-review-enforcement",
+    "target": "branch",
+    "enforcement": "disabled",
+    "bypass_actors": [],
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": [
+          "refs/heads/main"
+        ]
+      }
+    },
+    "rules": [
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "strict_required_status_checks_policy": true,
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [
+            {
+              "context": "ai/final-review",
+              "integration_id": 4669438
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "observed_policy_hash": "7e086ae89e2e80e2063046596318ac08867e3ca74af59c16723b514827fa4b04",
+  "observed_full_hash": "3b907b822d9f2e276399b627fe2bb76bb2c4f2c13168c3e01157a2813e6738c7",
+  "observed_enforcement": "disabled",
+  "ruleset_id": 21599682
+}

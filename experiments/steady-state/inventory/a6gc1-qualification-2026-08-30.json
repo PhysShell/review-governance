@@ -1,0 +1,135 @@
+{
+  "stage": "A6g-c1 live qualification",
+  "no_frozen_evidence": [
+    "coderabbit"
+  ],
+  "reconfirmation": {
+    "all_standing": true,
+    "not_standing": [],
+    "states": {
+      "codex": "STANDING"
+    },
+    "note": "a frozen snapshot is what the surface showed at the time; only a re-read says whether it still shows it"
+  },
+  "coderabbit_command_response": {
+    "carrier_id": 5469070667,
+    "shape": "COMMAND_RESPONSE",
+    "author_app_id": 347564,
+    "head_claim": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+    "review_ran": true,
+    "findings": 1,
+    "invocation_id": "v2:32df4e14a54a34489f6064b41b34adf5415ffbce454b30123e6ca2e567806562",
+    "invocation_correlation": "NOT_DERIVED",
+    "triggering_comment_ids": [],
+    "association": null,
+    "admissible": false,
+    "refusals": [
+      "NOT_ASSOCIATED_WITH_REQUEST"
+    ],
+    "content": "NOT_POSITIVE",
+    "content_reasons": [
+      "1 actionable comment(s)"
+    ]
+  },
+  "correlation_handle": {
+    "sticky_carrier": 5462558501,
+    "names": [
+      5469066573
+    ],
+    "our_coderabbit_request": 5469066573,
+    "our_codex_request": 5469066806,
+    "selective": true
+  },
+  "terminalization": {
+    "pr_state_now": "open",
+    "standing_acceptances": [
+      32
+    ],
+    "current_acceptance": "acc-91958c4a6b64758352097a99",
+    "terminalize_not_performed": true,
+    "note": "the PR is open, so nothing is terminalized; closing it is the cleanup step and is still on HOLD"
+  },
+  "live": {
+    "pr_32_head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+    "pr_32_state": "open",
+    "comments": 5
+  },
+  "reads_performed": 4,
+  "writes_performed": 0,
+  "deployment": {
+    "commit": "589a8f8ab57946012be526fa1512171753b91d4e",
+    "working_tree_clean": true,
+    "governor_runtime_started_at": "Sun 2026-08-30 15:26:54 UTC",
+    "governor_sentinel_started_at": "Sun 2026-08-30 15:26:54 UTC"
+  },
+  "acceptance_matrix": {
+    "PROVIDER_SURFACE_MODELLED_AS_REVISION_HISTORY": "PASS",
+    "RETRACTED_MARKER_REFUSES_SUCCESS": "PASS",
+    "SUPERSEDED_CARRIER_REFUSES_SUCCESS": "PASS",
+    "FROZEN_SNAPSHOT_SURVIVES_RETRACTION": "PASS",
+    "PRE_SUCCESS_PROVIDER_REREAD": "PASS",
+    "CODERABBIT_COMMAND_RESPONSE_PARSED": "PASS",
+    "COMMAND_RESPONSE_CONTENT": "FINDING_PRESENT / NOT_POSITIVE",
+    "INVOCATION_HASH_CORRELATION": "NOT_DERIVED",
+    "COMMAND_RESPONSE_ASSOCIATION": "UNRESOLVED",
+    "COMMAND_RESPONSE_OVERALL": "NOT_ADMISSIBLE",
+    "CODERABBIT_ADMITTED_ON_NOVELTY_ALONE": "REFUSED",
+    "PROVIDER_NAMED_REQUEST_HANDLE_DERIVED": "PASS",
+    "PR_CLOSE_IS_A_TERMINAL_TRANSITION": "PASS",
+    "TERMINATED_CANNOT_RETURN_TO_ACCEPTED": "PASS",
+    "REOPEN_ON_SAME_HEAD_NEEDS_FRESH_ACCEPTANCE": "PASS",
+    "RUNTIME_TERMINALIZES_FROM_OBSERVED_STATE": "PASS",
+    "UNREADABLE_PR_DOES_NOT_TERMINALIZE": "PASS",
+    "REAL_PROVIDER_REQUESTS": 0,
+    "REAL_SUCCESS_WRITES": 0,
+    "PR_CLOSED": false,
+    "BRANCH_DELETED": false
+  },
+  "invocation_hash_investigation": {
+    "pairs_tested": 3,
+    "prs": [
+      8,
+      32
+    ],
+    "hashes": [
+      "54a5281007bf7ebf\u2026",
+      "5b8bc5fed61e3c2c\u2026",
+      "32df4e14a54a3448\u2026"
+    ],
+    "preimages_tested": [
+      "cmd comment id",
+      "str(cmd id)",
+      "cmd body",
+      "cmd body stripped",
+      "cmd node_id",
+      "repo+cmd id",
+      "repo:pr:cmd id",
+      "cmd created_at",
+      "reply id",
+      "issuecomment URL",
+      "pr:cmd",
+      "cmd:pr",
+      "IC_ prefix"
+    ],
+    "matches": 0,
+    "conclusion": "semantics cannot be established; carried as an opaque invocation id and used for nothing"
+  },
+  "correlation_handle_derivation": {
+    "source": "provider-generated radioGroupId markup in CodeRabbit's sticky",
+    "corpus": "#32 sticky names 5469066573 (our request) 4x under 2 prefixes; #8 sticky names 5461445560 (the human @coderabbitai review)",
+    "selective": "the Codex request posted 11s later is not named",
+    "status": "observed regularity, not a documented contract; admitted as one ranked kind of association evidence, never sufficient alone"
+  },
+  "known_residual_risk": {
+    "CODEX_ADMITTED_ON_WEAK_ASSOCIATION": {
+      "kind": "NEW_CARRIER_ABSENT_FROM_BASELINE",
+      "strength": "WEAK",
+      "why_it_stands": "the Codex surface offers nothing stronger once the acknowledgement reaction is withdrawn, and the pre-request baseline showed Codex silent",
+      "why_it_is_recorded": "it is 'right bot, later timestamp' with a baseline in front of it. Named and ranked so a reader can see what the admission rests on, rather than reading as proof"
+    }
+  },
+  "tests": {
+    "total": 528,
+    "failed": 0
+  }
+}

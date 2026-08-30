@@ -106,15 +106,32 @@ class AuthStore:
             "SELECT * FROM auth_observations ORDER BY observation_id")]
 
     # --- the two questions the rest of the system is allowed to ask --------
-    def permits_triggers(self) -> bool:
-        """No observation at all is *not* permission.
+    def state_permits_triggers(self) -> bool:
+        """Fact-level only: is the *stored state* one that permits at all.
 
-        A Governor that has never established authorization has not
-        established it, which is the same operational fact as having lost
-        it. Fail closed.
+        This answers nothing about time and must never authorise an action
+        on its own. No observation is not permission — but neither is a
+        three-day-old one, and this function cannot tell the difference.
+        Authorization is derived by `auth_policy.evaluate`.
         """
         row = self.current()
         return bool(row) and row["state"] in PERMITS_TRIGGERS
+
+    def permits_triggers(self, *args, **kwargs):
+        """Retired in A6c. Kept as a trap rather than deleted.
+
+        It answered "is the last stored state AUTHORIZED" with no bound on
+        age, and that answer travelled onward as a bare boolean that could
+        license a provider round — or a production success — on a reading
+        three days old. Deleting it would let a future caller reinvent the
+        same name innocently; raising here makes the mistake loud at the
+        call site.
+        """
+        raise AuthorizationRefused(
+            "permits_triggers() is retired: it cannot bound the age of the "
+            "observation it reports. Use auth_policy.evaluate(store) and "
+            "check permission.permits_action, which carries the provenance "
+            "this boolean threw away.")
 
     def demands_invalidation(self) -> bool:
         row = self.current()
@@ -143,18 +160,29 @@ class AuthorizationRefused(Exception):
     """Raised where provider work would have started without authorization."""
 
 
-def require_triggers_permitted(store):
-    """The guard the provider-trigger path calls before doing anything.
+def require_triggers_permitted(store, permission=None):
+    """The guard a publishing path calls before doing anything.
 
-    Deliberately an exception rather than a boolean return: a caller that
-    forgets to check a boolean proceeds, and a caller that forgets to catch
-    an exception stops. In this direction the failure mode has to be the
-    stopping one.
+    An exception rather than a boolean return: a caller that forgets to
+    check a boolean proceeds, and a caller that forgets to catch an
+    exception stops. Here the failure mode has to be the stopping one.
+
+    `permission` is required rather than derived inside, so the freshness
+    of the reading is decided at the call site that is about to act on it.
+    Deriving it here would recreate the retired boolean one layer down —
+    a function that answers "may I act" from a reading of unknown age.
     """
     row = store.current()
-    if store.permits_triggers():
+    if permission is None:
+        raise AuthorizationRefused(
+            "a derived AuthorizationPermission is required: this guard will "
+            "not infer freshness on the caller's behalf. Use "
+            "auth_policy.evaluate(store).")
+    if getattr(permission, "permits_action", False):
         return row
-    state = row["state"] if row else "NEVER_OBSERVED"
+    state = getattr(permission, "state", "UNKNOWN")
     raise AuthorizationRefused(
-        f"provider triggers forbidden while user authorization is {state}; "
-        "A1c requires human reauthorization and fresh qualification")
+        f"provider triggers forbidden while the derived authorization "
+        f"permission is {state} "
+        f"(age={getattr(permission, 'age_seconds', None)}s); A1c requires "
+        "human reauthorization and fresh qualification")

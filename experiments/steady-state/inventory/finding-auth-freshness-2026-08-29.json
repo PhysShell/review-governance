@@ -1,0 +1,24 @@
+{
+  "finding": "AUTH_PERMISSION_HAS_NO_FRESHNESS_BOUND",
+  "found_at": "2026-08-29T12:26:43Z",
+  "found_during": "A6b pre-ACCEPT read, before any action",
+  "stage": "first live governed review round",
+  "observed": {
+    "auth_store_state": "AUTHORIZED",
+    "auth_store_source": "device_flow",
+    "auth_generation": 4,
+    "observed_at": "2026-08-26T13:07:33Z",
+    "observation_age_seconds": 256751,
+    "observation_age_hours": 71.3,
+    "permits_triggers_returns": true,
+    "live_access_token_probe": "HTTP 401",
+    "access_token_lifetime_seconds": 28800,
+    "access_token_obtained_at": "2026-08-26T13:04:24Z"
+  },
+  "defect": "permits_triggers() has no freshness bound. It reports the last recorded state regardless of age, so a 71-hour-old AUTHORIZED observation permits provider triggers while the access token behind it has been dead for roughly 63 hours.",
+  "why_it_matters": "The same boolean feeds publish.guard(authorized=...). A1c semantics require that an authorization loss render the gate failed, never passed. A stale AUTHORIZED could therefore permit publishing a production SUCCESS while the user authorization is in fact dead \u2014 the one direction this programme has refused since A1c.",
+  "not_a_false_alarm_because": "the store is not merely optimistic: the live probe returns 401, so the recorded state and reality disagree right now, not hypothetically.",
+  "class": "a stale reading reported as a current fact",
+  "action_taken": "STOP_PRE_ACCEPT_STATE_CHANGED; nothing was accepted, no provider was contacted, no credential was spent",
+  "not_repaired_here": "adding a freshness bound changes authorization semantics in production and is the owner's ruling, not an executor's ad hoc fix"
+}

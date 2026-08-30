@@ -1,0 +1,350 @@
+{
+  "stage": "A6g cleanup and terminalization",
+  "verdict": "PASS",
+  "note": "cleanup does not turn A6g into PASS and does not open #8",
+  "preconditions": {
+    "checks": {
+      "pr32_open": true,
+      "pr32_unmerged": true,
+      "pr32_head": true,
+      "branch_present": true,
+      "branch_head": true,
+      "one_governor_run": true,
+      "run_id": true,
+      "run_failure": true,
+      "run_epoch": true,
+      "main_unchanged": true,
+      "pr8_head": true,
+      "pr8_run": true,
+      "ruleset_active": true,
+      "ruleset_bypass_empty": true,
+      "acceptance_standing": true
+    },
+    "observed": {
+      "pr32": {
+        "state": "open",
+        "merged": false,
+        "head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+        "ref": "probe/a6e-steady-state"
+      },
+      "branch": {
+        "http": 200,
+        "sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52"
+      },
+      "governor_run": [
+        {
+          "id": 99104297860,
+          "conclusion": "failure",
+          "external_id": "pe-5a41d21a944c13836e1cc6ff",
+          "head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52"
+        }
+      ],
+      "main": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+      "pr8": {
+        "head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+        "state": "open",
+        "runs": [
+          {
+            "id": 99099324325,
+            "conclusion": "failure"
+          }
+        ]
+      },
+      "ruleset": {
+        "id": 21640654,
+        "enforcement": "active",
+        "bypass": 0,
+        "strict": true,
+        "integration": 4669438
+      },
+      "standing_acceptance": "acc-91958c4a6b64758352097a99"
+    },
+    "all_pass": true,
+    "failed": []
+  },
+  "step_1_close_pr_32": {
+    "write": {
+      "method": "PATCH",
+      "path": "/repos/PhysShell/evm-from-scratch/pulls/32",
+      "body": {
+        "state": "closed"
+      },
+      "http_status": 200
+    },
+    "attempts": 1,
+    "readback": {
+      "http_status": 200,
+      "state": "closed",
+      "merged": false,
+      "merged_at": null,
+      "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+      "closed_at": "2026-08-30T15:59:13Z"
+    },
+    "verified": true
+  },
+  "step_2_production_terminalization": {
+    "performed_by": "the deployed governor-runtime loop, not by hand",
+    "sequence": "open-set read -> #32 absent -> GET /pulls/32 -> observed state closed -> terminalize()",
+    "latency_s": 23,
+    "verbatim_pass": {
+      "at": "2026-08-30T15:59:38Z",
+      "state": "OK",
+      "pr_count": 2,
+      "outcomes": [
+        {
+          "pr_number": 8,
+          "head_sha": "2d8348703924c7470ba82f525cafc9afe720aee2",
+          "draft": false,
+          "at": "2026-08-30T15:59:34Z",
+          "writes": 0,
+          "scope_state": "RESOLVED",
+          "carrier": {
+            "state": "ADOPTED",
+            "wrote": false,
+            "carrier": 99099324325,
+            "head_sha": "2d8348703924c7470ba82f525cafc9afe720aee2",
+            "cause": "exactly one valid carrier already present; read, not rewritten"
+          },
+          "action": "ADOPTED"
+        },
+        {
+          "pr_number": 12,
+          "head_sha": "e29621f54a63b50db4afb77b608d6c3a4d533812",
+          "draft": true,
+          "at": "2026-08-30T15:59:35Z",
+          "writes": 0,
+          "action": "OBSERVED_ONLY",
+          "cause": "draft PRs are observed and never written to"
+        }
+      ],
+      "reconciliations": [
+        {
+          "repo": "PhysShell/evm-from-scratch",
+          "pr_number": 8,
+          "at": "2026-08-30T15:59:36Z",
+          "github_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+          "scope_state": "RESOLVED",
+          "source": "GitHub read; the edge delivery spool was not consulted",
+          "comparison_performed": true,
+          "stored_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+          "stored_repo": "PhysShell/evm-from-scratch",
+          "stored_pr_number": 8,
+          "stored_epoch_id": "pe-4f273e580b00f75366e8b30d",
+          "drift_detected": false,
+          "scope_proven_by": "the epoch row carries repo and pr_number as part of its identity, and both were matched",
+          "governor_runs_on_current_head": [
+            {
+              "id": 99099324325,
+              "conclusion": "failure"
+            }
+          ],
+          "current_head_is_unreviewed": false,
+          "finished_at": "2026-08-30T15:59:38Z"
+        }
+      ],
+      "terminalized": [
+        {
+          "pr_number": 32,
+          "pr_state": "closed",
+          "merged": false,
+          "acceptances": [
+            {
+              "acceptance_id": "acc-91958c4a6b64758352097a99",
+              "was_for_head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+              "state": "TERMINATED",
+              "cause": "PR_CLOSED",
+              "transition_id": "tr-7c381dca104551e2e8f11aba",
+              "observed_pr_state": "closed",
+              "observed_merged": false,
+              "at": "2026-08-30T15:59:36Z"
+            }
+          ]
+        }
+      ],
+      "writes": 0
+    },
+    "gate_before_branch_delete": {
+      "gate": {
+        "pr_readback_closed_unmerged": true,
+        "runtime_pass_observed_pr_closed": true,
+        "acceptance_row_terminated": true,
+        "current_acceptance_is_none": true,
+        "not_in_standing": true,
+        "transition_recorded": true
+      },
+      "all_pass": true,
+      "acceptance": {
+        "acceptance_id": "acc-91958c4a6b64758352097a99",
+        "state": "TERMINATED",
+        "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52"
+      },
+      "transitions": [
+        {
+          "transition_id": "tr-7c381dca104551e2e8f11aba",
+          "acceptance_id": "acc-91958c4a6b64758352097a99",
+          "repo": "PhysShell/evm-from-scratch",
+          "pr_number": 32,
+          "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+          "from_state": "ACCEPTED",
+          "to_state": "TERMINATED",
+          "cause": "PR_CLOSED",
+          "observed_pr_state": "closed",
+          "observed_merged": 0,
+          "at": "2026-08-30T15:59:36Z"
+        }
+      ]
+    }
+  },
+  "step_3_delete_branch": {
+    "first_attempt": {
+      "identity": "app-mediated user token (Governor App)",
+      "http_status": 403,
+      "message": "Resource not accessible by integration",
+      "retried": false,
+      "interpretation": "the Governor App has no contents:write. The runtime that publishes verdicts cannot move a ref, which is a designed separation and held under its first real test. Nothing was destroyed by the refusal."
+    },
+    "second_attempt": {
+      "identity": "repository owner credential (gh CLI)",
+      "result": "deleted",
+      "note": "the same separation that keeps ruleset administration out of the App: a repository-administration action is performed by the administrator, not by the runtime"
+    },
+    "readback": {
+      "ref_lookup_status": 404,
+      "absent": true,
+      "probe_branch_in_list": false,
+      "branches": [
+        "agent/experiment-roadmap",
+        "claude/ai-final-review-governor-pilot-vohn85",
+        "claude/ai-final-review-pilot-probe-vohn85",
+        "claude/e5-finding-certificates-prereg-yehaa2",
+        "claude/p-038-evm-from-scratch-0l73bd",
+        "main",
+        "probe/a4-headmove",
+        "probe/a4-states",
+        "probe/a4-wrong-source",
+        "probe/a5a-basemover",
+        "probe/a5a-strict",
+        "probe/a5ac1",
+        "probe/a5ac1b",
+        "probe/app-trigger-authority",
+        "probe/coderabbit-user-attributed-trigger",
+        "probe/codex-user-attributed-trigger",
+        "probe/governor-shadow-check",
+        "probe/positive-evidence-qualification",
+        "probe/shadow-success-lifecycle",
+        "probe/shadow-success-ordering",
+        "probe/user-authorization-lifecycle",
+        "probe/webhook-control-plane"
+      ]
+    }
+  },
+  "step_4_final_invariants": {
+    "checks": {
+      "pr32_closed": true,
+      "pr32_unmerged": true,
+      "no_success_on_head_a": true,
+      "main_unchanged": true,
+      "pr8_open_unmerged": true,
+      "pr8_head_unchanged": true,
+      "pr8_run_failure": true,
+      "ruleset_active": true,
+      "ruleset_bypass_empty": true,
+      "ruleset_strict": true,
+      "ruleset_integration": true,
+      "branch_deleted": true,
+      "acceptance_terminated": true,
+      "no_standing_acceptances": true,
+      "new_acceptances_zero": true,
+      "provider_posts_during_cleanup_zero": true
+    },
+    "invariants": {
+      "pr32": {
+        "state": "closed",
+        "merged": false,
+        "head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+        "closed_at": "2026-08-30T15:59:13Z"
+      },
+      "head_a_governor_runs": [
+        {
+          "id": 99104297860,
+          "conclusion": "failure"
+        }
+      ],
+      "main": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+      "pr8": {
+        "state": "open",
+        "merged": false,
+        "head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+        "governor_runs": [
+          {
+            "id": 99099324325,
+            "conclusion": "failure"
+          }
+        ]
+      },
+      "ruleset": {
+        "id": 21640654,
+        "enforcement": "active",
+        "bypass": 0,
+        "strict": true,
+        "integration": 4669438,
+        "context": "ai/final-review",
+        "updated_at": "2026-08-27T14:38:54.356+05:00"
+      },
+      "probe_branch": {
+        "lookup": 404,
+        "absent": true
+      },
+      "durable": {
+        "acceptances": [
+          {
+            "acceptance_id": "acc-91958c4a6b64758352097a99",
+            "state": "TERMINATED",
+            "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52"
+          }
+        ],
+        "transitions": [
+          {
+            "transition_id": "tr-7c381dca104551e2e8f11aba",
+            "acceptance_id": "acc-91958c4a6b64758352097a99",
+            "repo": "PhysShell/evm-from-scratch",
+            "pr_number": 32,
+            "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+            "from_state": "ACCEPTED",
+            "to_state": "TERMINATED",
+            "cause": "PR_CLOSED",
+            "observed_pr_state": "closed",
+            "observed_merged": 0,
+            "at": "2026-08-30T15:59:36Z"
+          }
+        ],
+        "standing": [],
+        "current_acceptance_head_a": null
+      },
+      "governor_comments_during_cleanup": [
+        5469066573,
+        5469066806
+      ],
+      "cleanup_writes": {
+        "pr_close": 1,
+        "branch_delete": 1,
+        "provider_posts": 0,
+        "success_writes": 0,
+        "new_acceptances": 0,
+        "head_mutations": 0,
+        "merge_attempts": 0
+      }
+    },
+    "all_pass": true,
+    "failed": []
+  },
+  "outcome": {
+    "A6g": "INCONCLUSIVE",
+    "A6g_c1": "PASS",
+    "A6g_CLEANUP": "PASS",
+    "pr_32": "CLOSED_UNMERGED",
+    "a6g_acceptance": "TERMINATED",
+    "probe_branch": "DELETED",
+    "READY_FOR_REAL_#8": "FAIL"
+  }
+}

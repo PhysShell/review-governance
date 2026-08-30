@@ -146,7 +146,7 @@ def apply_transition(args, store, history):
     result = {"checked_at": utcnow(),
               "auth_state": row["state"] if row else "NEVER_OBSERVED",
               "auth_generation": row["auth_generation"] if row else None,
-              "permits_triggers": store.permits_triggers(),
+              "stored_state_permits_triggers": store.state_permits_triggers(),
               "demands_invalidation": store.demands_invalidation(),
               "context": args.context, "invalidations": []}
     if not store.demands_invalidation():
@@ -168,7 +168,11 @@ def apply_transition(args, store, history):
 def cmd_check_triggers(args, store):
     """What the provider-trigger path calls before starting any work."""
     try:
-        row = auth_state.require_triggers_permitted(store)
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]
+                               / "steady-state" / "harness"))
+        import auth_policy
+        row = auth_state.require_triggers_permitted(
+            store, permission=auth_policy.evaluate(store))
         return {"triggers_permitted": True, "auth_state": row["state"],
                 "auth_generation": row["auth_generation"]}
     except auth_state.AuthorizationRefused as exc:
