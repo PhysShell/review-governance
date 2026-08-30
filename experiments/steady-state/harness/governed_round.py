@@ -42,6 +42,7 @@ import collector
 import evidence
 import gate as gate_mod
 import health as health_mod
+import observation as observation_mod
 import parsers
 import predicates
 import publish
@@ -78,51 +79,65 @@ class GovernedRound:
         self.health_sources = health_sources
         self.trace = []
 
-    # -- step 1: what is true right now, written down ---------------------
-    def observe(self, *, ruleset_id, ruleset_verified_fn, carrier_fn):
+    # -- step 1: what is true right now, read here and written down -------
+    def observe(self, *, epoch_id, ruleset_id=None):
         """Read GitHub and record the reading durably.
 
-        The row is what the acceptance writer will gate over. It exists so
-        that the writer never has to take a caller's word for the draft
-        flag, the base, the ruleset or the carrier.
+        Every semantic callback is gone. `ruleset_verified_fn` and
+        `carrier_fn` let a caller answer the two questions the gate cares
+        most about and have the answers stored as if they had been read —
+        an immutable lie, neatly indexed. The store performs the four
+        readings itself now; what remains here is the scope.
         """
-        status, pull = self.read("GET", f"/repos/{self.repo}/pulls/{self.pr_number}")
-        if status != 200:
-            return _stop("observe", "cannot read the PR")
-        head = pull["head"]["sha"]
-        carrier = carrier_fn(head)
-        row = self.rounds.record_observation(
-            repo=self.repo, pr_number=self.pr_number, head_sha=head,
-            draft=bool(pull["draft"]), base_ref=pull["base"]["ref"],
-            pr_state=pull["state"], ruleset_id=ruleset_id,
-            ruleset_verified=ruleset_verified_fn(), carrier=carrier,
-            observed_at=utcnow())
+        try:
+            row = self.rounds.record_observation(
+                self.read, repo=self.repo, pr_number=self.pr_number,
+                epoch_id=epoch_id, ruleset_id=ruleset_id)
+        except rounds.RoundError as exc:
+            return _stop("observe", str(exc))
         self.trace.append({"step": "observe",
                            "observation_id": row["observation_id"],
-                           "head_sha": head})
+                           "head_sha": row["head_sha"],
+                           "reads": [r["path"] for r in row["reads"]]})
         return row
 
     # -- step 2/3: authorization, then a gate the store runs --------------
-    def accept_candidate(self, observation, *, epoch_id, open_generations=()):
+    def accept_candidate(self, observation, *, epoch_id):
         if observation.get("state") == STOP:
             return observation
         permission = auth_policy.evaluate(self.auth)
         # Reported, never trusted: the store re-derives this from the same
-        # row before it writes anything.
-        preview = gate_mod.evaluate_observation(
-            observation, permission, open_generations=open_generations) \
-            if permission.state else None
+        # row before it writes anything, with generations it derives itself.
+        try:
+            preview = gate_mod.evaluate_observation(
+                observation, permission, epoch_id=epoch_id,
+                open_generations=self.rounds.open_generations(
+                    self.repo, self.pr_number))
+        except gate_mod.GateError as exc:
+            preview = [str(exc)]
         try:
             acceptance = self.rounds.record_acceptance(
                 repo=self.repo, pr_number=self.pr_number, epoch_id=epoch_id,
                 head_sha=observation["head_sha"], permission=permission,
-                observation_id=observation["observation_id"],
-                open_generations=open_generations)
+                observation_id=observation["observation_id"])
         except rounds.RoundError as exc:
             return _stop("accept", str(exc), failures=preview,
                          authorization=permission.as_dict())
         self.trace.append({"step": "accept", "acceptance": acceptance})
         return {"acceptance": acceptance, "permission": permission}
+
+    def observe_and_accept(self, *, epoch_id, ruleset_id=None):
+        """The production entrypoint: read, then accept that reading.
+
+        Offered so no caller has to hold an observation id at all. Choosing
+        one is how a historical reading gets paired with a fresh
+        permission, and the store refuses that — but an interface that
+        makes it expressible invites somebody to try.
+        """
+        observation = self.observe(epoch_id=epoch_id, ruleset_id=ruleset_id)
+        if observation.get("state") == STOP:
+            return observation
+        return self.accept_candidate(observation, epoch_id=epoch_id)
 
     # -- step 4: the baseline, read and frozen before asking --------------
     def capture_baseline(self, provider):
@@ -292,8 +307,32 @@ class GovernedRound:
         return record
 
     # -- step 13..17: reduce, guard, publish, read back -------------------
-    def conclude(self, records, *, epoch_id, existing_run, ruleset_verified_fn,
-                 patch):
+    def reread_ruleset(self, *, ruleset_id=None):
+        """The pre-success ruleset check, made by this driver.
+
+        `ruleset_verified_fn` was the last callback on the path: the first
+        ACCEPT and the final pre-success gate could both be answered by an
+        external lambda, which made the strongest guard in the system a
+        parameter.
+        """
+        rid = ruleset_id or observation_mod.PRODUCTION_RULESET_ID
+        status, ruleset = self.read("GET", f"/repos/{self.repo}/rulesets/{rid}")
+        if status != 200 or not ruleset:
+            return {"verified": False,
+                    "cause": f"cannot re-read ruleset {rid} ({status}); an "
+                             "unread rule is not a verified one"}
+        projection = observation_mod.project_ruleset(ruleset)
+        facts = {"ruleset_id": rid,
+                 "ruleset_enforcement": ruleset.get("enforcement"),
+                 "ruleset_visible_hash": observation_mod.visible_hash(projection),
+                 "ruleset_bypass": (ruleset["bypass_actors"]
+                                    if "bypass_actors" in ruleset
+                                    else observation_mod.BYPASS_UNOBSERVABLE)}
+        problems = observation_mod.ruleset_findings(facts)
+        return {"verified": not problems, "problems": problems, **facts}
+
+    def conclude(self, records, *, epoch_id, existing_run, patch,
+                 ruleset_id=None):
         bad = [r for r in records if r.get("state") == STOP]
         if bad:
             return _stop("conclude", "a provider round did not complete",
@@ -314,8 +353,10 @@ class GovernedRound:
                          "no standing acceptance for this head; a head that "
                          "returned to a previous value does not revive the "
                          "acceptance that was invalidated")
-        if not ruleset_verified_fn():
-            return _stop("conclude", "ruleset is no longer verified active")
+        ruleset = self.reread_ruleset(ruleset_id=ruleset_id)
+        if not ruleset["verified"]:
+            return _stop("conclude", "ruleset is no longer the reviewed policy",
+                         ruleset=ruleset)
 
         permission = auth_policy.evaluate(self.auth)
         bundle = evidence.build_bundle(
@@ -361,6 +402,7 @@ class GovernedRound:
         self.trace.append({"step": "conclude", "verdict": reduction["verdict"],
                            "projection": result["state"]})
         return {"bundle": bundle, "reduction": reduction, "health": health,
-                "guard": checked, "lineage": lineage, "replay": replay,
+                "guard": checked, "ruleset": ruleset, "lineage": lineage,
+                "replay": replay,
                 "publication": result,
                 "standing_acceptance": standing["acceptance_id"]}

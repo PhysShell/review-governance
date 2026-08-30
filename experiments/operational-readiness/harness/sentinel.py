@@ -28,6 +28,7 @@ import urllib.request
 from pathlib import Path
 
 import alerting
+import ruleset as ruleset_mod
 import governor
 
 CONFIG_DIR = Path(os.environ.get(
@@ -121,6 +122,46 @@ def check_reconciliation(args, notifier):
                 notifier, args, state["state"], "reconciliation_stale",
                 alerting.CRITICAL,
                 f"{state['state']} age={state['age_seconds']}")
+    return state
+
+
+def check_ruleset_bypass(args, notifier):
+    """The one precondition the runtime identity cannot observe.
+
+    A6f-c4 made the governed round read the production ruleset for itself,
+    and found that the Governor App's view omits `bypass_actors` entirely
+    while the owner's returns `[]`. So "no actor may bypass this rule" is
+    not establishable by the process that publishes verdicts, and pinning a
+    hash over the smaller object it *can* see would have quietly renamed the
+    gap rather than closing it.
+
+    It is checked here instead, with the owner credential, by a process
+    that cannot publish anything — which is the same separation that keeps
+    ruleset administration out of the App in the first place.
+    """
+    ok, body = ruleset_mod.gh("api", f"repos/{args.repo}/rulesets/{args.ruleset_id}")
+    if not ok or not isinstance(body, dict):
+        state = {"state": "UNREADABLE",
+                 "cause": "cannot read the ruleset with the owner credential"}
+    elif "bypass_actors" not in body:
+        # The owner token returns the key. Its absence means this check ran
+        # with an identity that cannot see it, which is not an empty list.
+        state = {"state": "UNOBSERVABLE",
+                 "cause": "this credential cannot see bypass_actors"}
+    else:
+        actors = body["bypass_actors"] or []
+        state = {"state": "EMPTY" if not actors else "POPULATED",
+                 "bypass_actors": len(actors),
+                 "enforcement": body.get("enforcement")}
+    if notifier:
+        if state["state"] == "EMPTY":
+            notifier.clear("ruleset_bypass_present", repo=args.repo,
+                           detected_at=utcnow())
+        else:
+            state["alert"] = _raise_or_hold(
+                notifier, args, state["state"], "ruleset_bypass_present",
+                alerting.CRITICAL,
+                f"{state['state']} {state.get('bypass_actors', '')}")
     return state
 
 
@@ -250,6 +291,7 @@ def sweep(args, notifier):
             "reconciliation": check_reconciliation(args, notifier),
             "installation_token": check_installation_token(args, notifier),
             "user_authorization": check_auth_state(args, notifier),
+            "ruleset_bypass": check_ruleset_bypass(args, notifier),
             "edge_receiver": receiver,
             "edge_watchdog": check_watchdog(args, notifier, healthz)}
 
@@ -278,6 +320,9 @@ def main():
                     default=str(CONFIG_DIR / "auth-state.json"))
     ap.add_argument("--watchdog-health",
                     default=str(CONFIG_DIR / "watchdog-health.json"))
+    ap.add_argument("--ruleset-id", type=int, default=21640654,
+                    help="the production ruleset whose bypass list the "
+                         "Governor App is not permitted to see")
     ap.add_argument("--alerts-db", default=str(CONFIG_DIR / "alerts.sqlite3"))
     ap.add_argument("--reconciliation-max-age", type=int,
                     default=RECONCILIATION_MAX_AGE)

@@ -35,7 +35,8 @@ OLD_RUN = "a3d2af24-8685-49a2-9e6e-728a59d8dcd4"
 NEW_RUN = "a765cb7e-2018-4a07-b66f-66539b83f8cd"
 
 
-from conftest import accept, record_observation  # noqa: E402
+from conftest import (FakeGitHub, accept,  # noqa: E402
+                      record_observation)
 
 
 # --- 1. the gate is run by the writer, over a row it loads -------------------
@@ -68,7 +69,7 @@ def test_an_observation_id_that_names_nothing_is_refused(store, fresh, bogus):
 
 
 def test_an_observation_of_another_head_is_refused(store, fresh):
-    obs = record_observation(store, head=B)
+    obs = record_observation(store, github=FakeGitHub(head=B))
     with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
@@ -77,7 +78,7 @@ def test_an_observation_of_another_head_is_refused(store, fresh):
 
 
 def test_an_observation_of_another_pr_is_refused(store, fresh):
-    obs = record_observation(store, pr=8)
+    obs = record_observation(store, github=FakeGitHub(pr=8), pr=8)
     with pytest.raises(rounds.RoundError):
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
@@ -85,24 +86,29 @@ def test_an_observation_of_another_pr_is_refused(store, fresh):
 
 
 def test_a_carrier_bound_to_another_head_is_refused(store, fresh):
-    """`carrier_run_id` was carried into the acceptance and never checked."""
-    obs = record_observation(store, carrier_head=B)
+    """`carrier_run_id` was carried into the acceptance and never checked.
+
+    Since A6f-c4 the carrier is read from the check runs on this exact
+    head, so a carrier attached elsewhere is not a mismatch — it is not
+    found at all, which is the stronger statement."""
+    obs = record_observation(store, github=FakeGitHub(carrier_head=B))
+    assert obs["facts"]["carrier_count"] == 0
     with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
                                 observation_id=obs["observation_id"])
-    assert "carrier_head_sha" in str(exc.value)
+    assert "0 ai/final-review runs" in str(exc.value)
 
 
 @pytest.mark.parametrize("kw,fragment", [
     ({"draft": True}, "draft"),
-    ({"base_ref": "release"}, "intended base"),
-    ({"ruleset_verified": False}, "ruleset"),
-    ({"carrier_state": "PENDING"}, "CONFIRMED failure carrier"),
+    ({"base_ref": "release"}, "targets 'release'"),
+    ({"enforcement": "disabled"}, "ruleset"),
+    ({"carrier_conclusion": "success"}, "carrier conclusion"),
 ])
 def test_a_failed_gate_over_the_stored_row_is_refused(store, fresh, kw,
                                                       fragment):
-    obs = record_observation(store, **kw)
+    obs = record_observation(store, github=FakeGitHub(**kw))
     with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
@@ -112,7 +118,7 @@ def test_a_failed_gate_over_the_stored_row_is_refused(store, fresh, kw,
 
 
 def test_a_stale_permission_is_refused_over_a_perfect_observation(store, stale):
-    obs = record_observation(store)
+    obs = record_observation(store, github=FakeGitHub())
     with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=stale,

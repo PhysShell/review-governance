@@ -31,139 +31,9 @@ import triggers  # noqa: E402
 from conftest import (A, B, CARRIER_RUN, EPOCH, REPO, RULESET,  # noqa: E402
                       now_stamp, permission_at)
 
-GOVERNOR_APP = 4669438
-STICKY_ID = 5349895008
-SKIP_RUN = "a3d2af24-8685-49a2-9e6e-728a59d8dcd4"
-REVIEW_RUN = "a765cb7e-2018-4a07-b66f-66539b83f8cd"
-BASE_COMMIT = "add0a0975eb499491eefe9f83d971152153d8106"
-
-#: The real shape: a skip block for one run sitting above nothing yet.
-STICKY_BEFORE = (
-    "<!-- This is an auto-generated comment: skip review by coderabbit.ai -->\n"
-    "> This repository does not receive automatic reviews.\n"
-    f"**Run ID**: `{SKIP_RUN}`\n"
-    "<!-- end of auto-generated comment: skip review by coderabbit.ai -->\n")
-
-#: The same carrier after a real review: the old skip block is still there.
-STICKY_AFTER = STICKY_BEFORE + (
-    "**Actionable comments posted: 0**\n"
-    f"Reviewing files that changed from the base of the PR and between "
-    f"{BASE_COMMIT} and {A}.\n"
-    f"**Run ID**: `{REVIEW_RUN}`\n"
-    "Example uuid quoted from the diff: 6ba7b810-9dad-11d1-80b4-00c04fd430c8\n")
-
-
-class FakeGitHub:
-    """Answers the endpoints the driver chooses to call, in GitHub's shapes.
-
-    Provider answers are staged as mutations that fire when the Governor
-    posts, so causality in the test comes from the order of events rather
-    than from timestamps chosen to make an assertion pass.
-    """
-
-    def __init__(self, *, head=A, pr=32, draft=False, base_ref="main",
-                 coderabbit_answers=True, codex_answers="reaction",
-                 carrier_conclusion="failure", carrier_head=None,
-                 carrier_runs=None, epoch_id=EPOCH):
-        self.head, self.pr, self.draft, self.base_ref = head, pr, draft, base_ref
-        self.coderabbit_answers = coderabbit_answers
-        self.codex_answers = codex_answers
-        self.epoch_id = epoch_id
-        self.calls = []
-        self.next_comment_id = 6000
-        self.patched = []
-        self.comments = [{
-            "id": STICKY_ID, "body": STICKY_BEFORE,
-            "user": {"login": "coderabbitai[bot]", "id": 136622811},
-            "performed_via_github_app": {"id": 347564},
-            "created_at": "2026-08-20T01:03:30Z",
-            "updated_at": "2026-08-20T01:03:30Z"}]
-        self.reactions = {}
-        self.check_runs = carrier_runs if carrier_runs is not None else [{
-            "id": CARRIER_RUN, "name": "ai/final-review",
-            "app": {"id": GOVERNOR_APP},
-            "head_sha": carrier_head or head, "external_id": epoch_id,
-            "conclusion": carrier_conclusion}]
-
-    # -- transport -------------------------------------------------------
-    def read(self, method, path):
-        return self.request(method, path, None)
-
-    def post(self, path, body):
-        return self.request("POST", path, body)
-
-    def request(self, method, path, body=None):
-        self.calls.append((method, path))
-        if method == "GET" and path == f"/repos/{REPO}/pulls/{self.pr}":
-            return 200, {"number": self.pr, "head": {"sha": self.head},
-                         "draft": self.draft, "base": {"ref": self.base_ref},
-                         "state": "open"}
-        if method == "GET" and path.startswith(
-                f"/repos/{REPO}/issues/{self.pr}/comments"):
-            return 200, [dict(c) for c in self.comments]
-        if method == "GET" and path.startswith(f"/repos/{REPO}/issues/comments/"):
-            cid = int(path.split("/issues/comments/")[1].split("/")[0])
-            return 200, [dict(r) for r in self.reactions.get(cid, [])]
-        if method == "POST" and path.startswith(
-                f"/repos/{REPO}/issues/{self.pr}/comments"):
-            return self._governor_asks(body)
-        if method == "GET" and "/check-runs/" in path:
-            rid = int(path.rsplit("/", 1)[1])
-            run = next((r for r in self.check_runs if r["id"] == rid), None)
-            return (200, dict(run)) if run else (404, None)
-        if method == "GET" and path.startswith(f"/repos/{REPO}/commits/"):
-            sha = path.split("/commits/")[1].split("/")[0]
-            return 200, {"check_runs": [dict(r) for r in self.check_runs
-                                        if r["head_sha"] == sha]}
-        if method == "PATCH" and "/check-runs/" in path:
-            rid = int(path.rsplit("/", 1)[1])
-            self.patched.append(rid)
-            for r in self.check_runs:
-                if r["id"] == rid:
-                    r.update({k: v for k, v in body.items()
-                              if k in ("conclusion", "head_sha", "external_id",
-                                       "name")})
-            return 200, {}
-        return 404, None
-
-    # -- the provider answering ------------------------------------------
-    def _governor_asks(self, body):
-        """The Governor's request comment, and the provider's reply to it.
-
-        The provider answer is staged here, at the moment the request is
-        posted, so a later `updated_at` is a consequence of the request
-        rather than a number chosen to satisfy the collector.
-        """
-        self.next_comment_id += 1
-        cid = self.next_comment_id
-        text = body["body"]
-        self.comments.append({
-            "id": cid, "body": text,
-            "user": {"login": "PhysShell", "id": 111},
-            "performed_via_github_app": {"id": GOVERNOR_APP},
-            "created_at": now_stamp(), "updated_at": now_stamp()})
-        answered_at = now_stamp(5)
-        if triggers.INVOCATION[triggers.CODERABBIT] in text \
-                and self.coderabbit_answers:
-            for c in self.comments:
-                if c["id"] == STICKY_ID:
-                    c["body"] = STICKY_AFTER
-                    c["updated_at"] = answered_at
-        if triggers.INVOCATION[triggers.CODEX] in text:
-            if self.codex_answers == "reaction":
-                self.reactions[cid] = [{
-                    "id": 7001, "content": "+1", "created_at": answered_at,
-                    "user": {"login": "chatgpt-codex-connector[bot]",
-                             "id": 199175422}}]
-            elif self.codex_answers == "findings":
-                self.comments.append({
-                    "id": cid + 500,
-                    "body": f"Found 2 issues in {A}",
-                    "user": {"login": "chatgpt-codex-connector[bot]",
-                             "id": 199175422},
-                    "performed_via_github_app": {"id": 1144995},
-                    "created_at": answered_at, "updated_at": answered_at})
-        return 201, {"id": cid}
+from conftest import (BASE_COMMIT, FakeGitHub, GOVERNOR_APP, MAIN,  # noqa: E402
+                      REVIEW_RUN, SKIP_RUN, STICKY_AFTER, STICKY_BEFORE,
+                      STICKY_ID, accept, captured_baseline, record_observation)
 
 
 def health_files(tmp_path, *, pr=32, head=A, all_compared=True,
@@ -218,14 +88,12 @@ class FakeEpochs:
 
 def run_round(d, github, *, providers=("coderabbit", "codex")):
     """The full sequence, exactly as A6g would drive it."""
-    observation = d.observe(ruleset_id=RULESET,
-                            ruleset_verified_fn=lambda: True,
-                            carrier_fn=lambda h: {
-                                "state": "CONFIRMED", "head_sha": h,
-                                "check_run_id": CARRIER_RUN})
-    accepted = d.accept_candidate(observation, epoch_id=EPOCH)
+    # One call: read, then accept that reading. There is no observation id
+    # for a caller to choose.
+    accepted = d.observe_and_accept(epoch_id=EPOCH, ruleset_id=github.ruleset_id)
     if accepted.get("state") == gr.STOP:
         return {"stopped": accepted}
+    observation = d.rounds.latest_observation(REPO, github.pr)
     records = []
     for provider in providers:
         baseline = d.capture_baseline(provider)
@@ -233,8 +101,7 @@ def run_round(d, github, *, providers=("coderabbit", "codex")):
         records.append(d.collect_evidence(sent, provider, 1))
     d.epochs = FakeEpochs()
     concluded = d.conclude(records, epoch_id=EPOCH, existing_run=CARRIER_RUN,
-                           ruleset_verified_fn=lambda: True,
-                           patch=github.request)
+                           patch=github.request, ruleset_id=github.ruleset_id)
     return {"observation": observation, "accepted": accepted,
             "records": records, "concluded": concluded}
 
@@ -336,17 +203,16 @@ def test_a_forged_gate_result_has_nowhere_to_go(store, fresh):
     assert "never from a claim about one" in str(exc.value)
 
 
-def test_the_writer_gates_over_the_stored_carrier_not_a_claim(store, fresh):
+def test_the_writer_gates_over_what_was_read_not_a_claim(store, fresh):
     """`carrier_run_id` and `ruleset_id` were carried and never re-checked.
-    Now they come from the row the writer loads."""
-    from conftest import record_observation
-    obs = record_observation(store, carrier_state="PENDING")
+    Now they are derived from the readbacks the writer loads."""
+    obs = record_observation(store, github=FakeGitHub(carrier_status="in_progress"))
     with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
                                 observation_id=obs["observation_id"])
-    assert "CONFIRMED failure carrier" in str(exc.value)
-    ok = record_observation(store)
+    assert "carrier status" in str(exc.value)
+    ok = record_observation(store, github=FakeGitHub())
     acc = store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                   head_sha=A, permission=fresh,
                                   observation_id=ok["observation_id"])
@@ -355,17 +221,18 @@ def test_the_writer_gates_over_the_stored_carrier_not_a_claim(store, fresh):
 
 
 def test_an_observation_of_another_pr_cannot_gate_this_one(store, fresh):
-    from conftest import record_observation
-    other = record_observation(store, pr=8)
+    other = record_observation(store, github=FakeGitHub(pr=8), pr=8)
     with pytest.raises(rounds.RoundError) as exc:
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
                                 observation_id=other["observation_id"])
-    assert "not about this acceptance" in str(exc.value)
+    # Refused as not-the-latest for #32 before the scope check is even
+    # reached — #32 has no reading at all. Either refusal is the right one.
+    assert ("not the latest reading" in str(exc.value)
+            or "not about this acceptance" in str(exc.value))
 
 
 def test_a_request_must_cite_the_baseline_that_preceded_it(store, snaps, fresh):
-    from conftest import accept, captured_baseline
     acc = accept(store, fresh)
     with pytest.raises(rounds.RoundError) as exc:
         store.record_intent(acceptance_id=acc["acceptance_id"], repo=REPO,
@@ -385,7 +252,6 @@ def test_a_request_must_cite_the_baseline_that_preceded_it(store, snaps, fresh):
 
 
 def test_a_baseline_for_another_pr_cannot_bind_this_request(store, snaps, fresh):
-    from conftest import accept, captured_baseline
     acc = accept(store, fresh)
     with pytest.raises(rounds.RoundError) as exc:
         store.record_intent(acceptance_id=acc["acceptance_id"], repo=REPO,
@@ -400,7 +266,6 @@ def test_two_readings_of_an_unchanged_surface_are_two_captures(snaps):
     """A baseline is an event. Content-addressing made a second reading
     return the first one's timestamp, so a request could cite a capture
     that happened long before it."""
-    from conftest import captured_baseline
     first = captured_baseline(snaps, captured_at="2026-08-30T04:00:00Z")
     second = captured_baseline(snaps, captured_at="2026-08-30T04:05:00Z")
     assert first["baseline_id"] != second["baseline_id"]
@@ -485,10 +350,9 @@ def test_evidence_from_an_invalidated_acceptance_does_not_migrate(
 
     store.invalidate_for_head_move(REPO, 32, B)
     store.invalidate_for_head_move(REPO, 32, A)
-    from conftest import record_observation
     import auth_policy
     fresh2 = auth_policy.evaluate(d.auth)
-    obs = record_observation(store)
+    obs = record_observation(store, github=FakeGitHub())
     new_acc = store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                       head_sha=A, permission=fresh2,
                                       observation_id=obs["observation_id"])
@@ -496,7 +360,7 @@ def test_evidence_from_an_invalidated_acceptance_does_not_migrate(
 
     d.epochs = FakeEpochs()
     out = d.conclude(old_records, epoch_id=EPOCH, existing_run=CARRIER_RUN,
-                     ruleset_verified_fn=lambda: True, patch=github.request)
+                     patch=github.request)
     assert out["standing_acceptance"] == new_acc["acceptance_id"]
     assert out["reduction"]["verdict"] == evidence.NOT_ESTABLISHED
     assert any("other acceptances" in r or "belongs to acceptance" in r
@@ -512,7 +376,6 @@ def test_the_generation_comes_from_the_permission_not_a_parameter(store, snaps,
         evidence.reduce).parameters
     assert "auth_generation" not in inspect.signature(
         gr.GovernedRound.conclude).parameters
-    from conftest import accept
     acc = accept(store, fresh)
     bundle = evidence.build_bundle(repo=REPO, pr_number=32, head_sha=A,
                                    lineage_records=[], auth_generation=4,

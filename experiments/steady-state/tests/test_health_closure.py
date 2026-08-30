@@ -234,6 +234,7 @@ def test_the_sweep_writes_the_watchdog_signal_only_from_a_healthz(tmp_path,
     monkeypatch.setattr(sentinel, "check_installation_token", lambda *a: {})
     monkeypatch.setattr(sentinel, "check_auth_state", lambda *a: {})
     monkeypatch.setattr(sentinel, "check_watchdog", lambda *a: {})
+    monkeypatch.setattr(sentinel, "check_ruleset_bypass", lambda *a: {})
 
     class Args:
         watchdog_health = str(tmp_path / "w.json")
@@ -301,9 +302,10 @@ def test_conclude_refuses_without_a_standing_acceptance(driver):
     A was invalidated, and evidence must not outlive the transition that
     ended it."""
     permission = ap.evaluate(driver.auth)
-    from conftest import record_observation
-    obs = record_observation(driver.rounds)
-    driver.rounds.record_acceptance(repo=REPO, pr_number=32, epoch_id="pe-1",
+    from conftest import FakeGitHub, record_observation
+    from conftest import EPOCH
+    obs = record_observation(driver.rounds, github=FakeGitHub())
+    driver.rounds.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                     head_sha=A, permission=permission,
                                     observation_id=obs["observation_id"])
     driver.rounds.invalidate_for_head_move(REPO, 32, B)
@@ -311,8 +313,7 @@ def test_conclude_refuses_without_a_standing_acceptance(driver):
 
     out = driver.conclude([{"requested_for_head": A, "provider": "codex",
                             "generation": 1, "state": "ANSWERED"}],
-                          epoch_id="pe-1", existing_run=1,
-                          ruleset_verified_fn=lambda: True,
+                          epoch_id=EPOCH, existing_run=1,
                           patch=lambda *a, **k: (_ for _ in ()).throw(
                               AssertionError("nothing may be published")))
     assert out["state"] == gr.STOP

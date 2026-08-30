@@ -31,15 +31,13 @@ CREATE TABLE IF NOT EXISTS observations (
     observation_id      TEXT PRIMARY KEY,
     repo                TEXT NOT NULL,
     pr_number           INTEGER NOT NULL,
+    epoch_id            TEXT,
     head_sha            TEXT NOT NULL,
-    draft               INTEGER NOT NULL,
-    base_ref            TEXT NOT NULL,
-    pr_state            TEXT NOT NULL,
-    ruleset_id          INTEGER,
-    ruleset_verified    INTEGER NOT NULL,
-    carrier_state       TEXT,
-    carrier_head_sha    TEXT,
-    carrier_run_id      INTEGER,
+    -- Readbacks, not conclusions. There is no `ruleset_verified` column
+    -- any more: a load-bearing boolean is a verdict nobody can re-check,
+    -- and the gate derives its answer from the facts below.
+    facts               TEXT NOT NULL,
+    reads               TEXT NOT NULL,
     observed_at         TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS acceptances (
@@ -105,6 +103,14 @@ ON provider_requests
 BEGIN SELECT RAISE(ABORT, 'recorded intent cannot be rewritten'); END;
 """
 
+#: How old a GitHub reading may be when it authorises an acceptance.
+#:
+#: The same shape as the 60-second authorization bound from A6c, and for
+#: the same reason: a stored fact that was true at some point is not a
+#: statement about now. Without it, a fresh OAuth permission could be
+#: paired with an arbitrarily old observation.
+OBSERVATION_MAX_AGE_SECONDS = 60
+
 ACCEPTED = "ACCEPTED"
 INVALIDATED = "INVALIDATED"
 
@@ -124,6 +130,16 @@ def utcnow():
 def _ident(prefix, payload):
     return prefix + hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
+
+
+def _age_seconds(stamp, now=None):
+    try:
+        at = datetime.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=datetime.timezone.utc)
+    except (TypeError, ValueError):
+        return None
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return round((now - at).total_seconds())
 
 
 class RoundStore:
@@ -149,6 +165,11 @@ class RoundStore:
             "acceptances": {"observation_id", "carrier_run_id", "ruleset_id"},
             "provider_requests": {"baseline_id", "baseline_digest",
                                   "baseline_captured_at"},
+            # Readings expire by construction — the acceptance bound is 60
+            # seconds — so a legacy observations table holds nothing an
+            # acceptance could still use. It is archived beside the store
+            # rather than dropped in silence.
+            "observations": {"facts", "reads", "epoch_id"},
         }
         for table, columns in wanted.items():
             present = {r[1] for r in self.conn.execute(
@@ -156,6 +177,12 @@ class RoundStore:
             if not present or columns <= present:
                 continue
             rows = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            if rows and table == "observations":
+                archive = Path(self.path).with_suffix(".retired-observations.json")
+                archive.write_text(json.dumps(
+                    [dict(r) for r in self.conn.execute(
+                        f"SELECT * FROM {table}")], indent=2, default=str) + "\n")
+                rows = 0
             if rows:
                 raise RoundError(
                     f"{self.path}: table {table} predates A6f-c3 and holds "
@@ -173,18 +200,30 @@ class RoundStore:
         self.conn.close()
 
     # --- observations -----------------------------------------------------
-    def record_observation(self, *, repo, pr_number, head_sha, draft, base_ref,
-                           pr_state, ruleset_id, ruleset_verified, carrier,
-                           observed_at=None):
-        """What was read from GitHub, written down before anything uses it.
+    def record_observation(self, read, *, repo, pr_number, epoch_id,
+                           ruleset_id=None, base=None):
+        """Perform the reading, then write it. There is no other order.
 
-        The acceptance writer will not take a conclusion from a caller, so
-        it needs somewhere to read the facts for itself. This is that row:
-        immutable, timestamped, and produced by the component that made the
-        HTTP request.
+        The previous signature took `head_sha`, `draft`, `ruleset_verified`
+        and `carrier` from the caller, so an immutable row could be written
+        from four supplied values and an acceptance faithfully re-derived
+        from it. That is `preconditions=[]` moved one table to the right.
+
+        `read` is the transport, the same injection point as `post` and
+        `patch`. Every semantic value is computed from what it returns.
         """
-        observed_at = observed_at or utcnow()
-        carrier = carrier or {}
+        import observation as obs_mod
+        kw = {}
+        if ruleset_id is not None:
+            kw["ruleset_id"] = ruleset_id
+        if base is not None:
+            kw["base"] = base
+        facts = obs_mod.read_live(read, repo=repo, pr_number=pr_number,
+                                  epoch_id=epoch_id, **kw)
+        if facts["state"] != obs_mod.RESOLVED:
+            raise RoundError(
+                f"observation not recorded: {facts['cause']}. An unread "
+                "surface is not an observed one.")
         # An observation is an event, like a baseline capture. Two readings
         # a second apart that find the same state are still two readings,
         # and collapsing them would let an acceptance cite a reading made
@@ -193,18 +232,16 @@ class RoundStore:
             "SELECT COUNT(*) FROM observations WHERE repo=? AND pr_number=?",
             (repo, int(pr_number))).fetchone()[0]
         oid = _ident("obs-", {"repo": repo, "pr": int(pr_number),
-                              "head": head_sha, "at": observed_at, "seq": seq,
-                              "carrier": carrier.get("check_run_id")})
+                              "head": facts["head_sha"],
+                              "at": facts["observed_at"], "seq": seq})
         self.conn.execute(
             "INSERT INTO observations (observation_id, repo, pr_number,"
-            " head_sha, draft, base_ref, pr_state, ruleset_id,"
-            " ruleset_verified, carrier_state, carrier_head_sha,"
-            " carrier_run_id, observed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (oid, repo, int(pr_number), head_sha, 1 if draft else 0, base_ref,
-             pr_state, ruleset_id, 1 if ruleset_verified else 0,
-             carrier.get("state"), carrier.get("head_sha"),
-             carrier.get("check_run_id") or carrier.get("run_id"),
-             observed_at))
+            " epoch_id, head_sha, facts, reads, observed_at)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (oid, repo, int(pr_number), epoch_id, facts["head_sha"],
+             json.dumps({k: v for k, v in facts.items() if k != "reads"},
+                        sort_keys=True),
+             json.dumps(facts["reads"]), facts["observed_at"]))
         self.conn.commit()
         return self.observation(oid)
 
@@ -215,26 +252,50 @@ class RoundStore:
         if not row:
             return None
         out = dict(row)
-        out["draft"] = bool(out["draft"])
-        out["ruleset_verified"] = bool(out["ruleset_verified"])
+        out["facts"] = json.loads(out["facts"])
+        out["reads"] = json.loads(out["reads"])
         return out
+
+    def latest_observation(self, repo, pr_number):
+        row = self.conn.execute(
+            "SELECT observation_id FROM observations WHERE repo=? AND "
+            "pr_number=? ORDER BY rowid DESC LIMIT 1",
+            (repo, int(pr_number))).fetchone()
+        return self.observation(row[0]) if row else None
+
+    def open_generations(self, repo, pr_number):
+        """Derived from this store's own rows, never supplied.
+
+        `open_generations=[]` was the last themed instance of the empty
+        list: the gate asked whether any incompatible generation was open
+        and the caller answered. An acceptance that has not been
+        invalidated, together with any request made under it, is what
+        "open" means, and only this store knows.
+        """
+        return [{"head_sha": a["head_sha"],
+                 "acceptance_id": a["acceptance_id"],
+                 "generations": sorted(
+                     int(r["generation"])
+                     for r in self.requests_for(a["acceptance_id"]))}
+                for a in self.acceptances_for(repo, pr_number)
+                if a["state"] == ACCEPTED]
 
     # --- acceptances ------------------------------------------------------
     def record_acceptance(self, *, repo, pr_number, epoch_id, head_sha,
-                          permission, observation_id, open_generations=(),
-                          accepted_at=None):
+                          permission, observation_id, accepted_at=None,
+                          observation_max_age=OBSERVATION_MAX_AGE_SECONDS):
         """The writer runs the gate itself, over a row it loads.
 
-        Two earlier shapes were refused here and both were the same
-        mistake: `preconditions=[]`, and then a hand-built
-        `GateEvaluation`. Neither could be fixed by checking the argument
-        harder, because a caller that can construct the evidence type can
-        construct the evidence.
+        Three earlier shapes were refused here and all were one mistake:
+        `preconditions=[]`, a hand-built `GateEvaluation`, and a durable
+        observation assembled from caller-supplied fields. None could be
+        fixed by checking the argument harder.
 
-        So there is no result argument. `observation_id` points at an
-        immutable row the driver wrote when it read GitHub, and this method
-        re-derives the verdict from that row — including the carrier run and
-        ruleset the previous version stored but never re-checked.
+        `observation_id` now points at a row that could only have been
+        written by performing the reads, and the row must additionally be
+        the **latest** for this PR and younger than the operational bound.
+        A reading that is merely on file says what was true once; an
+        acceptance is about now.
         """
         import gate as gate_mod
         observation = self.observation(observation_id)
@@ -243,11 +304,26 @@ class RoundStore:
                 f"no observation {observation_id!r}: an acceptance is "
                 "written from a recorded reading, never from a claim about "
                 "one")
+        latest = self.latest_observation(repo, pr_number)
+        if latest is None or latest["observation_id"] != observation_id:
+            raise RoundError(
+                f"observation {observation_id} is not the latest reading for "
+                f"{repo}#{pr_number}; a superseded reading cannot authorise "
+                "an action taken now")
+        age = _age_seconds(observation["observed_at"])
+        if age is None:
+            raise RoundError("the observation carries no usable timestamp")
+        if age > observation_max_age:
+            raise RoundError(
+                f"observation is {age}s old, bound is {observation_max_age}s; "
+                "re-read before accepting rather than accepting what was "
+                "true earlier")
         try:
             gate_mod.require_scope(observation, repo=repo, pr_number=pr_number,
                                    head_sha=head_sha)
             failures = gate_mod.evaluate_observation(
-                observation, permission, open_generations=open_generations)
+                observation, permission, epoch_id=epoch_id,
+                open_generations=self.open_generations(repo, pr_number))
         except gate_mod.GateError as exc:
             raise RoundError(str(exc)) from None
         if failures:
@@ -270,8 +346,8 @@ class RoundStore:
             " state) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (aid, repo, int(pr_number), epoch_id, head_sha, accepted_at,
              permission.observation_id, permission.auth_generation,
-             observation_id, observation["carrier_run_id"],
-             observation["ruleset_id"], ACCEPTED))
+             observation_id, observation["facts"]["carrier_run_id"],
+             observation["facts"]["ruleset_id"], ACCEPTED))
         self.conn.commit()
         return self.acceptance(aid)
 
