@@ -46,6 +46,7 @@ import observation as observation_mod
 import parsers
 import predicates
 import publish
+import revisions as rev_mod
 import rounds
 import triggers
 
@@ -285,6 +286,13 @@ class GovernedRound:
             return _stop("collect", "evidence is not admissible",
                          admissibility=verdict, snapshot_id=snap["snapshot_id"])
         predicate = predicates.evaluate(provider, snap["payload"])
+        # The revision that qualified this evidence, recorded so a later
+        # re-read has something exact to compare against.
+        frozen_revision = rev_mod.revision_of(observed, observed_at=utcnow())
+        self.snapshots.record_revision(
+            snapshot_id=snap["snapshot_id"], repo=self.repo,
+            pr_number=self.pr_number, provider=provider, kind="FROZEN",
+            revision=frozen_revision)
         record = {
             "provider": provider, "generation": generation,
             "requested_for_head": head, "state": "ANSWERED",
@@ -299,6 +307,7 @@ class GovernedRound:
             # store actually holds rather than a second normalization.
             "snapshot_id": snap["snapshot_id"],
             "snapshot_digest": snap["snapshot_digest"],
+            "frozen_revision": frozen_revision,
         }
         self.trace.append({"step": "collect", "provider": provider,
                            "snapshot_id": snap["snapshot_id"],
@@ -307,6 +316,59 @@ class GovernedRound:
         return record
 
     # -- step 13..17: reduce, guard, publish, read back -------------------
+    def reconfirm_providers(self, records):
+        """Does the surface still show what the frozen snapshots show?
+
+        A6g watched a CodeRabbit run id appear and be withdrawn eighty
+        seconds later by a rewrite of the same carrier, and watched Codex
+        withdraw its acknowledgement reaction after commenting. A frozen
+        snapshot stays a historical fact — at that moment the surface really
+        did say this — but it stops being a standing verdict when the
+        surface stops saying it, and only a re-read can tell the two apart.
+        """
+        results = []
+        for rec in records:
+            provider = rec["provider"]
+            request_row = self.rounds.request(rec["request_id"])
+            surface = self.read_terminal_surface(request_row)
+            if surface.get("state") == STOP:
+                results.append({"provider": provider,
+                                "snapshot_id": rec["snapshot_id"],
+                                "comparison": {"state": rev_mod.UNREADABLE,
+                                               "cause": surface["cause"]}})
+                continue
+            baseline = self.snapshots.baseline(request_row["baseline_id"])
+            base = {**baseline["payload"], "baseline_id": baseline["baseline_id"],
+                    "read_ok": baseline["read_ok"],
+                    "captured_at": baseline["captured_at"]}
+            head = request_row["requested_for_head"]
+            if provider == triggers.CODERABBIT:
+                current = parsers.parse_coderabbit(
+                    surface["comments"], base=base, requested_head=head,
+                    generation=rec["generation"])
+            else:
+                current = parsers.parse_codex(
+                    surface["comments"], surface["reactions"], base=base,
+                    requested_head=head, generation=rec["generation"],
+                    request_carrier_id=request_row["request_carrier_id"])
+            current_rev = (rev_mod.revision_of(current, observed_at=utcnow())
+                           if current else None)
+            comparison = rev_mod.compare(rec["frozen_revision"], current_rev)
+            self.snapshots.record_revision(
+                snapshot_id=rec["snapshot_id"], repo=self.repo,
+                pr_number=self.pr_number, provider=provider,
+                kind=f"RECONFIRM_{comparison['state']}",
+                revision=current_rev or {"observed_at": utcnow(),
+                                         "carrier_id": None})
+            results.append({"provider": provider,
+                            "snapshot_id": rec["snapshot_id"],
+                            "comparison": comparison,
+                            "current_revision": current_rev})
+        out = rev_mod.reconfirmation(results)
+        self.trace.append({"step": "reconfirm", "all_standing": out["all_standing"],
+                           "states": out["states"]})
+        return out
+
     def reread_ruleset(self, *, ruleset_id=None):
         """The pre-success ruleset check, made by this driver.
 
@@ -368,9 +430,16 @@ class GovernedRound:
         lineage = evidence.verify_request_lineage(bundle, self.rounds, standing)
         replay = evidence.verify_against_snapshots(
             bundle, self.snapshots, predicates.evaluate)
+        # The last thing checked before the verdict is whether the evidence
+        # still exists on the surface it came from.
+        reconfirmed = self.reconfirm_providers(records)
         reduction = evidence.reduce(bundle, current_head_sha=head,
                                     permission=permission,
                                     standing_acceptance=standing)
+        if reduction["verdict"] == evidence.SUCCESS and not reconfirmed["all_standing"]:
+            return _stop("conclude",
+                         "frozen evidence is no longer standing on the "
+                         "provider surface", reconfirmation=reconfirmed)
         if reduction["verdict"] == evidence.SUCCESS and not lineage["all_bound"]:
             return _stop("conclude",
                          "the cited requests do not belong to the standing "
@@ -403,6 +472,6 @@ class GovernedRound:
                            "projection": result["state"]})
         return {"bundle": bundle, "reduction": reduction, "health": health,
                 "guard": checked, "ruleset": ruleset, "lineage": lineage,
-                "replay": replay,
+                "reconfirmation": reconfirmed, "replay": replay,
                 "publication": result,
                 "standing_acceptance": standing["acceptance_id"]}

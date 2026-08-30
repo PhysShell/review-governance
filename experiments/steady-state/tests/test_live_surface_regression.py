@@ -46,7 +46,11 @@ REVIEW_RUN = "a765cb7e-2018-4a07-b66f-66539b83f8cd"
 def request_row(**over):
     base = {"provider": "coderabbit", "requested_for_head": H8_REVIEWED,
             "intent_recorded_at": "2026-08-29T10:00:00Z",
-            "request_carrier_id": 5462012129,
+            # The comment CodeRabbit itself names in the sticky's
+            # radioGroupId markup as what it was answering. A6g-c1 turned
+            # that into association evidence, and the old placeholder id
+            # was correctly refused the moment it did.
+            "request_carrier_id": 5461445560,
             "acceptance_id": "acc-live", "baseline_id": "base-live"}
     base.update(over)
     return base

@@ -37,6 +37,22 @@ CREATE TABLE IF NOT EXISTS baselines (
     payload         TEXT NOT NULL,
     captured_at     TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS provider_revisions (
+    revision_id  TEXT PRIMARY KEY,
+    snapshot_id  TEXT NOT NULL,
+    repo         TEXT NOT NULL,
+    pr_number    INTEGER NOT NULL,
+    provider     TEXT NOT NULL,
+    kind         TEXT NOT NULL,
+    revision     TEXT NOT NULL,
+    observed_at  TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS revisions_immutable_update
+BEFORE UPDATE ON provider_revisions
+BEGIN SELECT RAISE(ABORT, 'a recorded revision cannot be rewritten'); END;
+CREATE TRIGGER IF NOT EXISTS revisions_immutable_delete
+BEFORE DELETE ON provider_revisions
+BEGIN SELECT RAISE(ABORT, 'revisions are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS baselines_immutable_update
 BEFORE UPDATE ON baselines
 BEGIN SELECT RAISE(ABORT, 'a captured baseline cannot be rewritten'); END;
@@ -134,6 +150,36 @@ class SnapshotStore:
              json.dumps(payload, sort_keys=True), captured_at))
         self.conn.commit()
         return self.baseline(bid)
+
+    def record_revision(self, *, snapshot_id, repo, pr_number, provider, kind,
+                        revision):
+        """One observed revision of one provider carrier.
+
+        Kept beside the snapshot rather than inside it: a snapshot is what
+        the surface showed once and must never change, while the revision
+        history is how many times we have looked since.
+        """
+        seq = self.conn.execute(
+            "SELECT COUNT(*) FROM provider_revisions WHERE snapshot_id=?",
+            (snapshot_id,)).fetchone()[0]
+        rid = "rev-" + hashlib.sha256(
+            f"{snapshot_id}\x00{kind}\x00{seq}\x00{revision.get('observed_at')}"
+            .encode()).hexdigest()[:24]
+        self.conn.execute(
+            "INSERT INTO provider_revisions (revision_id, snapshot_id, repo,"
+            " pr_number, provider, kind, revision, observed_at)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (rid, snapshot_id, repo, int(pr_number), provider, kind,
+             json.dumps(revision, sort_keys=True), revision.get("observed_at")))
+        self.conn.commit()
+        return {"revision_id": rid, "snapshot_id": snapshot_id, "kind": kind,
+                "revision": revision}
+
+    def revisions_for(self, snapshot_id):
+        return [{**dict(r), "revision": json.loads(r["revision"])}
+                for r in self.conn.execute(
+                    "SELECT * FROM provider_revisions WHERE snapshot_id=? "
+                    "ORDER BY rowid", (snapshot_id,))]
 
     def baseline(self, baseline_id):
         row = self.conn.execute(

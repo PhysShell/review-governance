@@ -168,6 +168,37 @@ SKIP_BLOCK = re.compile(
     re.S | re.I)
 RANGE = re.compile(r"between\s+([0-9a-f]{40})\s+and\s+([0-9a-f]{40})", re.I)
 
+#: The id of the comment that triggered a review, written into CodeRabbit's
+#: own sticky markup.
+#:
+#: Derived from a corpus rather than from documentation, in A6g-c1: on `#32`
+#: the sticky carries `…-5469066573`, which is the exact request the
+#: Governor posted, four times under two prefixes; on `#8` it carries
+#: `…-5461445560`, the human `@coderabbitai review` that triggered that
+#: run. The Codex request posted eleven seconds later is **not** there, so
+#: the handle is selective rather than "some recent comment".
+#:
+#: Treated as association evidence and never as sufficient on its own. It
+#: is an observed regularity in provider-generated markup, not a contract,
+#: and A6g-c1 records it as such.
+RADIO_GROUP = re.compile(r'"radioGroupId"\s*:\s*"[a-z0-9-]*?-(\d{6,})"')
+
+#: The command-response shape, which is a different protocol from the
+#: sticky. Observed on `#32` as carrier 5469070667.
+AUTO_REPLY = re.compile(
+    r"<!--\s*This is an auto-generated reply by CodeRabbit\s*-->", re.I)
+COMMAND_INVOCATION = re.compile(
+    r"CodeRabbit review command invocation:\s*(v\d+):([0-9a-f]{64})", re.I)
+REVIEWED_COMMIT_ONLY = re.compile(
+    r"I reviewed commit\s*`([0-9a-f]{40})`\s*only", re.I)
+FINDING_HEADING = re.compile(r"\*\*Finding\b[^*]*\*\*", re.I)
+REVIEW_FINISHED = re.compile(r"\bReview finished\b", re.I)
+
+
+def triggering_comment_ids(body):
+    """Which comment CodeRabbit says it was answering."""
+    return sorted({int(x) for x in RADIO_GROUP.findall(body or "")})
+
 
 def split_run_blocks(body):
     """Separate the sticky into the blocks it actually contains.
@@ -245,6 +276,11 @@ def parse_coderabbit(raw_comments, *, base, requested_head, generation):
                 c["id"], digests.get(str(c["id"]))),
             "observed_digest": body_digest(body),
             "head_binding": "ATTESTED",
+            "shape": "STICKY",
+            # CodeRabbit writes the id of the comment that triggered the
+            # review into its own markup. Provider-generated, selective,
+            # and therefore association evidence — never sufficient alone.
+            "triggering_comment_ids": triggering_comment_ids(body),
             "body": text,
             "reviewed_range": {"from": rng.group(1), "to": rng.group(2)} if rng else None,
             # The head is attested by the *end of the reviewed range*, not
@@ -370,3 +406,71 @@ def parse_codex(raw_comments, raw_reactions, *, base, requested_head,
         "review_ran": True,
         "findings": [],
     }
+
+
+def parse_coderabbit_command_response(raw_comments, *, base, requested_head,
+                                      generation, request_carrier_id):
+    """The reply CodeRabbit posts to an explicit review command.
+
+    A different protocol from the sticky, and A6g met it live: carrier
+    5469070667 carries an App identity, an invocation marker, the exact
+    full target SHA, an explicit finding and `Review finished` — and no
+    `**Run ID**` label, no reviewed range, no actionable count. The sticky
+    parser correctly declined it, which is why A6g ended INCONCLUSIVE.
+
+    Content and association are derived separately here, because they are
+    separately knowable. The `v2:<hash>` marker is emitted as an opaque
+    invocation id and is **not** treated as correlating with anything: A6g-c1
+    tested it against every preimage the request offers — comment id, node
+    id, body, timestamps, repo-scoped combinations — over three
+    command/response pairs on two PRs, and none matched. An unexplained
+    64-hex value that happens to be unique per invocation is not a proof of
+    anything, however much it looks like one.
+    """
+    base = require_baseline(base)
+    for c in raw_comments:
+        reject_synthetic(c)
+    known = set(base["run_ids"])
+    for c in sorted(raw_comments, key=lambda c: c.get("created_at") or "",
+                    reverse=True):
+        if (c.get("user") or {}).get("login") != "coderabbitai[bot]":
+            continue
+        body = c.get("body") or ""
+        if not AUTO_REPLY.search(body):
+            continue
+        invocation = COMMAND_INVOCATION.search(body)
+        target = REVIEWED_COMMIT_ONLY.search(body)
+        findings = [{"kind": "finding", "heading": m}
+                    for m in FINDING_HEADING.findall(body)]
+        low = body.lower()
+        return {
+            "id": c["id"], "provider": "coderabbit",
+            "shape": "COMMAND_RESPONSE",
+            **author_identity(c),
+            "created_at": c.get("created_at"),
+            "updated_at": c.get("updated_at"),
+            "observed_digest": body_digest(body),
+            "baseline_digest_for_carrier": base["digests"].get(
+                c["id"], base["digests"].get(str(c["id"]))),
+            "body": body,
+            # The provider names the commit it reviewed, in full.
+            "head_claim": (target.group(1)
+                           if target and target.group(1) == requested_head
+                           else None),
+            "head_binding": "ATTESTED",
+            "generation": generation,
+            # No run-id protocol in this shape at all.
+            "new_run_ids": sorted(set(RUN_ID.findall(body)) - known),
+            "invocation_id": (f"{invocation.group(1)}:{invocation.group(2)}"
+                              if invocation else None),
+            "invocation_correlation": "NOT_DERIVED",
+            # Association evidence this carrier itself offers. Empty is the
+            # honest answer for this shape, and the collector refuses on it.
+            "triggering_comment_ids": triggering_comment_ids(body),
+            "carrier_was_rewritten": False,
+            "absent_from_baseline": c["id"] not in base["carrier_ids"],
+            "review_ran": bool(REVIEW_FINISHED.search(body))
+                          and not any(m in low for m in RATE_MARKERS),
+            "findings": findings,
+        }
+    return None

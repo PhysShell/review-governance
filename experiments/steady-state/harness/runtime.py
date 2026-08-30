@@ -120,11 +120,40 @@ def pass_once(request, repo, base, store, write_enabled=True,
                 "cause": "cannot list open PRs; nothing is assumed"}
     outcomes = [handle(request, repo, p, store, write_enabled, round_store)
                 for p in pulls]
+    # A PR that leaves the open set leaves this loop's view with it. Until
+    # A6g-c1 that meant closing a PR removed the object while the
+    # acceptance about it stayed ACCEPTED — the permission outliving the
+    # thing it permitted. Standing acceptances are enumerated from the
+    # store, and any whose PR is no longer open is terminalized from the
+    # observed state.
+    terminalized = []
+    if round_store is not None:
+        open_numbers = {p["pr_number"] for p in pulls}
+        for pr in round_store.prs_with_standing_acceptances(repo):
+            if pr in open_numbers:
+                continue
+            status, pull = request("GET", f"/repos/{repo}/pulls/{pr}")
+            if status != 200 or not pull:
+                # Unreadable is not closed. Leaving the acceptance standing
+                # is the fail-closed choice: it blocks nothing and asserts
+                # nothing.
+                terminalized.append({"pr_number": pr, "state": "UNREADABLE",
+                                     "http_status": status})
+                continue
+            if pull.get("state") == "open":
+                continue
+            ended = round_store.terminalize(
+                repo, pr, cause=f"PR_{pull['state'].upper()}"
+                + ("_MERGED" if pull.get("merged") else ""))
+            terminalized.append({"pr_number": pr, "pr_state": pull["state"],
+                                 "merged": bool(pull.get("merged")),
+                                 "acceptances": ended})
     reconciliations = [
         sr.reconcile(request, repo, p["pr_number"], store)
         for p in pulls if not p["draft"]]
     return {"at": utcnow(), "state": "OK", "pr_count": len(pulls),
             "outcomes": outcomes, "reconciliations": reconciliations,
+            "terminalized": terminalized,
             "writes": sum(o["writes"] for o in outcomes)}
 
 

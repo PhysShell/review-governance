@@ -91,6 +91,10 @@ BEGIN SELECT RAISE(ABORT, 'a request is bound to the capture that preceded it');
 CREATE TRIGGER IF NOT EXISTS acceptances_no_delete
 BEFORE DELETE ON acceptances
 BEGIN SELECT RAISE(ABORT, 'acceptances are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS acceptances_no_resurrection
+BEFORE UPDATE OF state ON acceptances
+WHEN OLD.state IN ('INVALIDATED', 'TERMINATED') AND NEW.state = 'ACCEPTED'
+BEGIN SELECT RAISE(ABORT, 'a terminated acceptance does not return to ACCEPTED; reopening the PR on the same commit requires a fresh reading and a fresh acceptance'); END;
 CREATE TRIGGER IF NOT EXISTS acceptances_no_scope_update
 BEFORE UPDATE OF repo, pr_number, head_sha, epoch_id ON acceptances
 BEGIN SELECT RAISE(ABORT, 'an acceptance is about one commit and cannot be repointed'); END;
@@ -113,6 +117,12 @@ OBSERVATION_MAX_AGE_SECONDS = 60
 
 ACCEPTED = "ACCEPTED"
 INVALIDATED = "INVALIDATED"
+#: The transition A6g-c1 found missing. Closing a PR removed it from the
+#: runtime's view — which lists open PRs — before the acceptance about it
+#: had any terminal state, so cleanup would have deleted the object and
+#: left the permission standing.
+TERMINATED = "TERMINATED"
+TERMINAL_STATES = (INVALIDATED, TERMINATED)
 
 INTENT_RECORDED = "INTENT_RECORDED"
 SENT = "SENT"
@@ -373,6 +383,33 @@ class RoundStore:
         rows = [a for a in self.acceptances_for(repo, pr_number)
                 if a["head_sha"] == head_sha and a["state"] == ACCEPTED]
         return rows[-1] if rows else None
+
+    def terminalize(self, repo, pr_number, *, cause, at=None):
+        """End every standing acceptance for a PR that is no longer eligible.
+
+        Established from observed GitHub state by the caller that read it,
+        never from an operator boolean. The state is terminal in the strong
+        sense: a schema trigger refuses any move back to ACCEPTED, so
+        reopening the PR on the very same commit cannot revive it. That is
+        the resurrection A6g-c1 found — `current_acceptance` selects on
+        exact head and ACCEPTED, and nothing in it knew the PR had closed.
+        """
+        at = at or utcnow()
+        standing = [a for a in self.acceptances_for(repo, pr_number)
+                    if a["state"] == ACCEPTED]
+        for a in standing:
+            self.conn.execute(
+                "UPDATE acceptances SET state=? WHERE acceptance_id=?",
+                (TERMINATED, a["acceptance_id"]))
+        self.conn.commit()
+        return [{"acceptance_id": a["acceptance_id"], "was_for_head": a["head_sha"],
+                 "state": TERMINATED, "cause": cause, "at": at}
+                for a in standing]
+
+    def prs_with_standing_acceptances(self, repo):
+        return sorted({a["pr_number"] for a in self.conn.execute(
+            "SELECT pr_number FROM acceptances WHERE repo=? AND state=?",
+            (repo, ACCEPTED))})
 
     def invalidate_for_head_move(self, repo, pr_number, current_head, at=None):
         """Mark acceptances about vanished commits, without repointing any.

@@ -43,6 +43,88 @@ def _parse(value):
         value.replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S%z")
 
 
+#: How a carrier can be shown to answer *our* request, strongest first.
+#:
+#: Ranked and named because A6g-c1 found the ranking doing real work. The
+#: weakest kind — "a carrier of this provider that was not on the surface
+#: before we asked" — is `right bot + later timestamp`, which is the
+#: inference this programme has buried twice. It survives only where the
+#: provider offers nothing stronger and the pre-request baseline shows that
+#: provider silent, and it is recorded as WEAK so a reader can see what the
+#: admission rests on.
+PROVIDER_NAMED_OUR_REQUEST = "PROVIDER_NAMED_OUR_REQUEST"
+REPLY_TO_OUR_REQUEST = "REPLY_TO_OUR_REQUEST"
+REACTION_ON_OUR_REQUEST = "REACTION_ON_OUR_REQUEST"
+NEW_RUN_ID_ABSENT_FROM_BASELINE = "NEW_RUN_ID_ABSENT_FROM_BASELINE"
+NEW_CARRIER_ABSENT_FROM_BASELINE = "NEW_CARRIER_ABSENT_FROM_BASELINE"
+
+STRENGTH = {
+    PROVIDER_NAMED_OUR_REQUEST: "STRONG",
+    REPLY_TO_OUR_REQUEST: "STRONG",
+    REACTION_ON_OUR_REQUEST: "STRONG",
+    NEW_RUN_ID_ABSENT_FROM_BASELINE: "MEDIUM",
+    NEW_CARRIER_ABSENT_FROM_BASELINE: "WEAK",
+}
+
+#: Which kinds each provider surface may be admitted on.
+#:
+#: CodeRabbit is excluded from the weak kind because it demonstrably posts
+#: unprompted: comment 5462558501 appeared on `#32` six seconds after the
+#: PR opened, before the Governor had asked anything. "A new CodeRabbit
+#: carrier" is therefore not evidence of a CodeRabbit answer. Its
+#: command-response shape carries neither a run id nor the triggering-comment
+#: handle, so it stays UNASSOCIATED — which is the A6g-c1 finding, not a
+#: gap to be widened until something fits.
+ADMISSIBLE_ASSOCIATIONS = {
+    "coderabbit": (PROVIDER_NAMED_OUR_REQUEST, REPLY_TO_OUR_REQUEST,
+                   NEW_RUN_ID_ABSENT_FROM_BASELINE),
+    "codex": (PROVIDER_NAMED_OUR_REQUEST, REPLY_TO_OUR_REQUEST,
+              REACTION_ON_OUR_REQUEST, NEW_CARRIER_ABSENT_FROM_BASELINE),
+}
+
+
+def associate(carrier, request_row):
+    """The strongest kind this carrier offers, or why there is none."""
+    provider = request_row["provider"]
+    allowed = ADMISSIBLE_ASSOCIATIONS.get(provider, ())
+    ours = request_row["request_carrier_id"]
+    triggered_by = [int(x) for x in (carrier.get("triggering_comment_ids") or [])]
+    offered = []
+    if ours in triggered_by:
+        offered.append(PROVIDER_NAMED_OUR_REQUEST)
+    if carrier.get("in_reply_to_id") == ours:
+        offered.append(REPLY_TO_OUR_REQUEST)
+    if carrier.get("reaction_on_request_carrier") == ours:
+        offered.append(REACTION_ON_OUR_REQUEST)
+    if carrier.get("new_run_ids"):
+        offered.append(NEW_RUN_ID_ABSENT_FROM_BASELINE)
+    if carrier.get("absent_from_baseline"):
+        offered.append(NEW_CARRIER_ABSENT_FROM_BASELINE)
+
+    # A handle that names somebody else's request is a refusal, not an
+    # absence: the provider said whose answer this is, and it is not ours.
+    if triggered_by and ours not in triggered_by:
+        return None, (f"the provider names comment {triggered_by} as what it "
+                      f"was answering, not our request {ours}")
+    if carrier.get("in_reply_to_id") not in (None, ours):
+        return None, "carrier replies to another request"
+    if carrier.get("reaction_on_request_carrier") not in (None, ours):
+        return None, "reaction is on another request"
+
+    usable = [k for k in allowed if k in offered]
+    if usable:
+        return usable[0], None
+    if offered:
+        return None, (f"the only association this carrier offers is "
+                      f"{offered[0]}, which is not admissible for {provider}: "
+                      f"this provider posts unprompted, so a new carrier is "
+                      f"not evidence of an answer")
+    return None, ("no association evidence: the provider did not name our "
+                  "request, there is no reply id, no reaction on our request, "
+                  "and no provider run identifier absent from the pre-request "
+                  "baseline")
+
+
 def _rewritten_after_request(carrier, request_row):
     """A carrier that existed before the request but was mutated after it.
 
@@ -133,47 +215,16 @@ def admissibility(carrier, request_row, *, head_sha, generation):
                             "detail": "carrier or intent timestamp unusable; "
                                       "ordering could not be established"})
 
+    association = None
     if request_row.get("request_carrier_id") is None:
         reasons.append({
             "code": UNASSOCIATED,
             "detail": "the request has no carrier id, so nothing can be "
                       "shown to be its answer"})
     else:
-        # Association must be established positively. The previous version
-        # only checked `in_reply_to_id` when it was not None — and issue
-        # comments have no such field at all, confirmed against the live
-        # API, so that branch never executed. Right bot, later timestamp
-        # and right SHA was enough to be admitted.
-        reply_to = carrier.get("in_reply_to_id")
-        new_runs = carrier.get("new_run_ids")
-        reaction_on = carrier.get("reaction_on_request_carrier")
-        if reply_to is not None:
-            if reply_to != request_row["request_carrier_id"]:
-                reasons.append({"code": UNASSOCIATED,
-                                "detail": "carrier replies to another request"})
-        elif reaction_on is not None:
-            if reaction_on != request_row["request_carrier_id"]:
-                reasons.append({"code": UNASSOCIATED,
-                                "detail": "reaction is on another request"})
-        elif new_runs or carrier.get("absent_from_baseline"):
-            # Two shapes of positive association, one per provider surface.
-            # CodeRabbit rewrites a sticky and the proof is a run id absent
-            # from the pre-request capture; Codex posts a fresh comment and
-            # the proof is the carrier's own absence from it. Requiring a
-            # run id of both refused every Codex answer, because Codex
-            # carriers do not have one.
-            if not rewritten and \
-                    carrier.get("created_at", "") <= request_row["intent_recorded_at"]:
-                reasons.append({
-                    "code": UNASSOCIATED,
-                    "detail": "a carrier older than the intent that was not "
-                              "rewritten cannot be this request's answer"})
-        else:
-            reasons.append({
-                "code": UNASSOCIATED,
-                "detail": "no association evidence: no reply id, no reaction "
-                          "on our request, and no provider run identifier "
-                          "absent from the pre-request baseline"})
+        association, detail = associate(carrier, request_row)
+        if association is None:
+            reasons.append({"code": UNASSOCIATED, "detail": detail})
 
     observed_generation = carrier.get("generation")
     if observed_generation is None:
@@ -225,6 +276,8 @@ def admissibility(carrier, request_row, *, head_sha, generation):
         "carrier_id": carrier.get("id"),
         "provider": provider,
         "head_binding": binding,
+        "association": association,
+        "association_strength": STRENGTH.get(association),
         "causality": "POST_REQUEST_REWRITE" if rewritten else "NEWER_CARRIER",
         "checked_at": datetime.datetime.now(
             datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
