@@ -1,0 +1,233 @@
+{
+  "stage": "A6g disposable live governed round",
+  "verdict": "INCONCLUSIVE",
+  "cause": "UNKNOWN_CODERABBIT_TERMINAL_SHAPE",
+  "preflight": {
+    "owner_ruleset": {
+      "enforcement": "active",
+      "bypass_actors": 0,
+      "scope": [
+        "refs/heads/main"
+      ],
+      "context": "ai/final-review",
+      "integration_id": 4669438,
+      "strict": true,
+      "can_bypass": "never"
+    },
+    "access_token_probe_before_refresh": {
+      "http_status": 401,
+      "result": "needs_refresh"
+    },
+    "credential_refreshes": 1,
+    "auth_generation_before": 5,
+    "auth_generation_after": 6
+  },
+  "authorization": {
+    "state": "FRESH_AUTHORIZED",
+    "auth_generation": 6,
+    "observation_id": 7,
+    "permits_action": true
+  },
+  "observation": {
+    "observation_id": "obs-fc1f95e5d55f2173560f4998",
+    "observed_at": "2026-08-30T13:48:25Z",
+    "pr": {
+      "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+      "draft": false,
+      "pr_state": "open",
+      "base_ref": "main"
+    },
+    "ancestry": {
+      "base_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+      "merge_base_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+      "behind_by": 0,
+      "contains_current_base": true
+    },
+    "ruleset": {
+      "ruleset_id": 21640654,
+      "ruleset_enforcement": "active",
+      "ruleset_visible_hash": "d7862d47542833ead6cd93481e0bc7fd7b849e513d330c34ad5645e4bfef2d7c",
+      "ruleset_bypass": "UNOBSERVABLE_BY_RUNTIME_IDENTITY"
+    },
+    "carrier": {
+      "carrier_count": 1,
+      "carrier_run_id": 99104297860,
+      "carrier_status": "completed",
+      "carrier_conclusion": "failure",
+      "carrier_external_id": "pe-5a41d21a944c13836e1cc6ff"
+    }
+  },
+  "acceptance": {
+    "acceptance_id": "acc-91958c4a6b64758352097a99",
+    "state": "ACCEPTED",
+    "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+    "epoch_id": "pe-5a41d21a944c13836e1cc6ff",
+    "auth_generation": 6,
+    "observation_id": "obs-fc1f95e5d55f2173560f4998",
+    "carrier_run_id": 99104297860,
+    "ruleset_id": 21640654
+  },
+  "requests": {
+    "coderabbit": {
+      "baseline_id": "base-e6affb19a6abed17108e3a86",
+      "baseline_run_ids": [
+        "36be3b65-5991-4dd1-8da9-de0e54baf434"
+      ],
+      "baseline_captured_at": "2026-08-30T13:48:25Z",
+      "elapsed_since_user_probe_s": 7.9,
+      "request_id": "req-87e232b1b7cbef16584b2e7a",
+      "outcome": "SENT",
+      "request_carrier_id": 5469066573,
+      "intent_recorded_at": "2026-08-30T13:48:26Z",
+      "auth_generation": 6,
+      "acceptance_id": "acc-91958c4a6b64758352097a99"
+    },
+    "codex": {
+      "baseline_id": "base-15225a12093be3861e88fc90",
+      "baseline_run_ids": [],
+      "baseline_captured_at": "2026-08-30T13:48:28Z",
+      "elapsed_since_user_probe_s": 10.8,
+      "request_id": "req-573bd615739a1552ff3ba331",
+      "outcome": "SENT",
+      "request_carrier_id": 5469066806,
+      "intent_recorded_at": "2026-08-30T13:48:29Z",
+      "auth_generation": 6,
+      "acceptance_id": "acc-91958c4a6b64758352097a99"
+    }
+  },
+  "request_timing": {
+    "both_posts_completed_s": 10.8,
+    "permission_age_at_finish_s": 11,
+    "bound_s": 60,
+    "posts": 2
+  },
+  "polling": {
+    "interval_s": 30,
+    "window_min": 10,
+    "polls": 17,
+    "note": "a first poller run mis-scored the Codex eyes reaction as an answer; the predicate was corrected to accept only +1 or a comment and polling resumed in the same window. The driver, not the poller, judged."
+  },
+  "provider_outcomes": {
+    "codex": {
+      "state": "ANSWERED",
+      "snapshot_id": "snap-1a3de9a6b14c33041b28d828",
+      "terminal": {
+        "state": "ADMISSIBLE",
+        "admissible": true,
+        "head_binding": "ATTESTED",
+        "causality": "NEWER_CARRIER",
+        "carrier_id": 5469076456
+      },
+      "predicate": {
+        "state": "ADVISORY_POSITIVE",
+        "findings_count": 0,
+        "reasons": []
+      },
+      "acceptance_id": "acc-91958c4a6b64758352097a99",
+      "baseline_id": "base-15225a12093be3861e88fc90"
+    },
+    "coderabbit": {
+      "state": "STOP",
+      "cause": "no coderabbit answer attributable to this request",
+      "admissibility": null,
+      "snapshot_id": null
+    }
+  },
+  "finding_PROVIDER_SURFACE_IS_NOT_MONOTONIC": {
+    "observed": [
+      {
+        "at": "2026-08-30T13:49:29Z",
+        "coderabbit_labelled_run_ids": [
+          "8dcf9c5c-51af-4d9c-8d9b-b134c785b66e"
+        ]
+      },
+      {
+        "at": "2026-08-30T13:50:55Z",
+        "coderabbit_labelled_run_ids": [],
+        "cause": "both carriers rewritten at 13:50:25 and 13:50:31"
+      },
+      {
+        "at": "2026-08-30T14:00Z",
+        "codex_reactions_on_our_request": [],
+        "cause": "the eyes acknowledgement was removed after the comment was posted"
+      }
+    ],
+    "consequence": "a run identifier can appear and be withdrawn by a later rewrite of the same carrier. Admissibility that happens to run inside that window would admit evidence the surface no longer carries, and the frozen snapshot would be the only remaining copy. The baseline model assumed the set of labelled run ids only grows.",
+    "not_a_defect_in": "the frozen-snapshot design, which is what makes the disappearance detectable at all"
+  },
+  "coderabbit_terminal_shape": {
+    "answer": "reply comment 5469070667: 'I reviewed commit 7ad19f5e\u2026 only. Review finished.'",
+    "run_id_label": null,
+    "reviewed_range": null,
+    "actionable_comment_count": null,
+    "why_not_admissible": "no provider-labelled run id absent from the captured baseline, so nothing attributes this carrier to our request",
+    "fixture": "experiments/steady-state/fixtures/a6g-live-round-carriers.json"
+  },
+  "success": {
+    "published": false,
+    "reason": "one provider did not qualify"
+  },
+  "head_b_mutation": {
+    "performed": false,
+    "reason": "preregistered as conditional on a confirmed SUCCESS on HEAD_A"
+  },
+  "cleanup": {
+    "performed": false,
+    "reason": "closing #32 and deleting probe/a6e-steady-state is irreversible and would destroy the only sanctioned disposable fixture; the round is INCONCLUSIVE rather than finished, so the decision is the operator's"
+  },
+  "durable_state": {
+    "acceptances": 1,
+    "standing_acceptance": "acc-91958c4a6b64758352097a99",
+    "provider_requests": 2,
+    "observations": 5,
+    "baselines": 2,
+    "evidence_snapshots": 1
+  },
+  "live_end_state": {
+    "pull_requests": {
+      "32": {
+        "head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+        "state": "open",
+        "merged": false,
+        "governor_runs": [
+          {
+            "id": 99104297860,
+            "conclusion": "failure",
+            "external_id": "pe-5a41d21a944c13836e1cc6ff"
+          }
+        ]
+      },
+      "8": {
+        "head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+        "state": "open",
+        "merged": false,
+        "governor_runs": [
+          {
+            "id": 99099324325,
+            "conclusion": "failure",
+            "external_id": "pe-4f273e580b00f75366e8b30d"
+          }
+        ]
+      }
+    },
+    "main": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+    "ruleset": {
+      "id": 21640654,
+      "enforcement": "active",
+      "bypass_actors": 0,
+      "updated_at": "2026-08-27T14:38:54.356+05:00"
+    },
+    "provider_posts_made": 2,
+    "provider_retries": 0,
+    "success_writes": 0,
+    "head_mutations": 0,
+    "merges": 0,
+    "fixture_edits": 0
+  },
+  "outcome_mapping": {
+    "A6g": "INCONCLUSIVE",
+    "READY_FOR_REAL_#8_ROUND": "FAIL",
+    "NO_SUCCESS": true,
+    "NO_RETRY": true
+  }
+}
