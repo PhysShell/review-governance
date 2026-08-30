@@ -83,14 +83,31 @@ ADMISSIBLE_ASSOCIATIONS = {
 }
 
 
+def _named_after_the_request(carrier, request_row):
+    """The handle must have appeared after we asked, on this carrier."""
+    try:
+        return _parse(carrier["updated_at"]) > _parse(
+            request_row["intent_recorded_at"])
+    except (KeyError, ValueError, TypeError):
+        return False
+
+
 def associate(carrier, request_row):
     """The strongest kind this carrier offers, or why there is none."""
     provider = request_row["provider"]
     allowed = ADMISSIBLE_ASSOCIATIONS.get(provider, ())
     ours = request_row["request_carrier_id"]
     triggered_by = [int(x) for x in (carrier.get("triggering_comment_ids") or [])]
+    newly_named = [int(x) for x in (carrier.get("new_triggering_ids") or [])]
     offered = []
-    if ours in triggered_by:
+    # A6g-c2 qualified this handle, with four constraints. Corpus: on `#8`
+    # the sticky names the command whose review produced the content it is
+    # showing — a later command that did not rewrite it is not named — and
+    # on `#32` it named our request and not the Codex request posted eleven
+    # seconds later. That is a binding between trigger and content, which
+    # is what association means; it is not "the provider mentioned us".
+    if ours in triggered_by and newly_named == [ours] and \
+            _named_after_the_request(carrier, request_row):
         offered.append(PROVIDER_NAMED_OUR_REQUEST)
     if carrier.get("in_reply_to_id") == ours:
         offered.append(REPLY_TO_OUR_REQUEST)

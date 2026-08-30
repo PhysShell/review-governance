@@ -150,11 +150,20 @@ def baseline(comments, *, provider_app):
     runs = set()
     for c in theirs:
         runs.update(RUN_ID.findall(c.get("body") or ""))
+    triggering = {c["id"]: triggering_comment_ids(c.get("body") or "")
+                  for c in theirs}
     return {
         "captured_at": _utcnow(),
         "provider_app": provider_app,
         "carrier_ids": sorted(c["id"] for c in theirs),
         "run_ids": sorted(runs),
+        # A6g-c2: the triggering-comment handles already on the surface.
+        # Without these, "the provider names our request" is a statement
+        # about one reading; with them it is a differential — the provider
+        # *began* naming our request, which is the same shape as the run-id
+        # rule and is what makes it evidence of causality.
+        "triggering_ids": {str(k): v for k, v in triggering.items()},
+        "all_triggering_ids": sorted({i for v in triggering.values() for i in v}),
         "digests": {c["id"]: body_digest(c.get("body")) for c in theirs},
         "updated_at": {c["id"]: c.get("updated_at") for c in theirs},
         "note": "frozen before the request; a later review may rewrite an "
@@ -242,12 +251,20 @@ def parse_coderabbit(raw_comments, *, base, requested_head, generation):
             if (c.get("user") or {}).get("login") == "coderabbitai[bot]"]
     known = set(base["payload"]["run_ids"] if "payload" in base
                 else base["run_ids"])
+    known_triggers = set(base.get("all_triggering_ids") or [])
     for c in sorted(mine, key=lambda c: c.get("updated_at") or ""):
         body = c.get("body") or ""
         blocks = split_run_blocks(body)
         # A skip block belongs to its own run and cannot speak for another.
         new_review_runs = sorted(set(blocks["review_run_ids"]) - known)
-        if not new_review_runs:
+        named = triggering_comment_ids(body)
+        new_triggers = sorted(set(named) - known_triggers)
+        # Either kind of new marker makes this carrier worth parsing.
+        # Association and content are decided separately and downstream:
+        # a carrier that names our request but says nothing reviewable is
+        # associated and NOT_POSITIVE, which is a different answer from
+        # "not our answer".
+        if not new_review_runs and not new_triggers:
             continue
         digests = base["payload"]["digests"] if "payload" in base else base["digests"]
         carriers = base["payload"]["carrier_ids"] if "payload" in base else base["carrier_ids"]
@@ -280,7 +297,8 @@ def parse_coderabbit(raw_comments, *, base, requested_head, generation):
             # CodeRabbit writes the id of the comment that triggered the
             # review into its own markup. Provider-generated, selective,
             # and therefore association evidence — never sufficient alone.
-            "triggering_comment_ids": triggering_comment_ids(body),
+            "triggering_comment_ids": named,
+            "new_triggering_ids": new_triggers,
             "body": text,
             "reviewed_range": {"from": rng.group(1), "to": rng.group(2)} if rng else None,
             # The head is attested by the *end of the reviewed range*, not
@@ -467,6 +485,9 @@ def parse_coderabbit_command_response(raw_comments, *, base, requested_head,
             # Association evidence this carrier itself offers. Empty is the
             # honest answer for this shape, and the collector refuses on it.
             "triggering_comment_ids": triggering_comment_ids(body),
+            "new_triggering_ids": sorted(
+                set(triggering_comment_ids(body))
+                - set(base.get("all_triggering_ids") or [])),
             "carrier_was_rewritten": False,
             "absent_from_baseline": c["id"] not in base["carrier_ids"],
             "review_ran": bool(REVIEW_FINISHED.search(body))

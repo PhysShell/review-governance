@@ -254,22 +254,89 @@ def test_the_sticky_names_the_comment_it_was_answering():
     assert CODEX_REQUEST not in ids
 
 
-def test_the_handle_admits_our_request_and_refuses_another():
-    sticky = {**BY_ID[CR_STICKY]}
-    out = parsers.parse_coderabbit_command_response(
+def _named(out, ids, new=None, updated="2026-08-30T13:50:25Z"):
+    return {**out, "triggering_comment_ids": list(ids),
+            "new_triggering_ids": list(ids if new is None else new),
+            "updated_at": updated}
+
+
+def _cmd():
+    return parsers.parse_coderabbit_command_response(
         [BY_ID[CR_REPLY]], base=base_for(), requested_head=HEAD_A,
         generation=1, request_carrier_id=CR_REQUEST)
-    named = {**out, "triggering_comment_ids": [CR_REQUEST]}
-    v = collector.admissibility(named, request_row(), head_sha=HEAD_A,
-                                generation=1)
+
+
+def test_the_qualified_handle_admits_our_request():
+    """All four constraints together: our id, exactly one, new since the
+    baseline, and named after we asked."""
+    v = collector.admissibility(_named(_cmd(), [CR_REQUEST]), request_row(),
+                                head_sha=HEAD_A, generation=1)
     assert v["association"] == collector.PROVIDER_NAMED_OUR_REQUEST
     assert v["association_strength"] == "STRONG"
 
-    stray = {**out, "triggering_comment_ids": [CODEX_REQUEST]}
-    w = collector.admissibility(stray, request_row(), head_sha=HEAD_A,
+
+def test_a_handle_naming_somebody_else_is_a_refusal_not_an_absence():
+    v = collector.admissibility(_named(_cmd(), [CODEX_REQUEST]), request_row(),
+                                head_sha=HEAD_A, generation=1)
+    assert v["admissible"] is False
+    assert any("not our request" in r["detail"] for r in v["refusals"])
+
+
+def test_a_handle_that_predates_the_request_is_not_a_differential():
+    """`the provider names our id` is a statement about one reading. The
+    evidence is that it *began* naming it — otherwise a handle already on
+    the surface would associate a review that happened before we asked."""
+    v = collector.admissibility(_named(_cmd(), [CR_REQUEST], new=[]),
+                                request_row(), head_sha=HEAD_A, generation=1)
+    assert v["association"] != collector.PROVIDER_NAMED_OUR_REQUEST
+
+
+def test_a_handle_on_a_carrier_not_rewritten_since_the_request_is_refused():
+    v = collector.admissibility(
+        _named(_cmd(), [CR_REQUEST], updated="2026-08-30T13:00:00Z"),
+        request_row(), head_sha=HEAD_A, generation=1)
+    assert v["association"] != collector.PROVIDER_NAMED_OUR_REQUEST
+
+
+def test_several_named_triggers_do_not_qualify():
+    """One carrier naming two new triggers does not say which review it is
+    showing, and picking ours would be choosing the convenient one."""
+    v = collector.admissibility(
+        _named(_cmd(), [CR_REQUEST, CODEX_REQUEST]), request_row(),
+        head_sha=HEAD_A, generation=1)
+    assert v["admissible"] is False
+
+
+def test_the_handle_is_not_transitive_between_carriers():
+    """The sticky named our request; the command-response did not. A6g-c2
+    refuses to lend one carrier's association to its sibling — that is
+    proximity, which this programme has buried twice."""
+    v = collector.admissibility(_cmd(), request_row(), head_sha=HEAD_A,
                                 generation=1)
-    assert w["admissible"] is False
-    assert any("not our request" in r["detail"] for r in w["refusals"])
+    assert v["admissible"] is False
+    assert v["association"] is None
+
+
+def test_the_baseline_records_the_handles_it_saw(snaps):
+    """Without this the differential is unprovable after the fact."""
+    payload = parsers.baseline(
+        [{"id": CR_STICKY, "body": BY_ID[CR_STICKY]["body"],
+          "user": {"login": "coderabbitai[bot]", "id": 136622811},
+          "performed_via_github_app": {"id": 347564},
+          "updated_at": "2026-08-30T13:50:25Z"}], provider_app=347564)
+    assert payload["all_triggering_ids"] == [CR_REQUEST]
+    assert payload["triggering_ids"][str(CR_STICKY)] == [CR_REQUEST]
+
+
+def test_a6g_would_still_have_been_inconclusive_under_this_rule():
+    """The rule does not retro-qualify the round that motivated it. The
+    carrier bearing the handle carried no reviewable content, and the
+    carrier with content bore no handle."""
+    sticky_named = parsers.triggering_comment_ids(BY_ID[CR_STICKY]["body"])
+    assert sticky_named == [CR_REQUEST]
+    blocks = parsers.split_run_blocks(BY_ID[CR_STICKY]["body"])
+    assert parsers._findings_from_review_block(blocks["review_text"]) is None
+    assert parsers.triggering_comment_ids(BY_ID[CR_REPLY]["body"]) == []
 
 
 def test_the_live_codex_answer_is_admitted_on_the_weak_kind():
