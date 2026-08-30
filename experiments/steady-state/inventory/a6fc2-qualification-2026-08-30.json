@@ -1,0 +1,180 @@
+{
+  "auth": {
+    "stored": "AUTHORIZED",
+    "derived": "STALE",
+    "age_seconds": 54615,
+    "auth_generation": 5,
+    "note": "STALE is derived, never stored; no /user probe was made"
+  },
+  "observation": {
+    "head_sha": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+    "draft": false,
+    "base_ref": "main"
+  },
+  "accept_preconditions": {
+    "passed": false,
+    "failures": [
+      "authorization permission is STALE (age=54615s): observation is 54615s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+    ]
+  },
+  "durable_accept": {
+    "written": false,
+    "reason": "preconditions refused",
+    "failures": [
+      "authorization permission is STALE (age=54616s): observation is 54616s old, bound is 60s. This blocks new actions; it does not assert that authorization was lost"
+    ]
+  },
+  "caller_asserted_gate": {
+    "empty_list": "refused: expected a GateEvaluation produced by gate.evaluate, got list: an empty list is not eviden",
+    "none": "refused: expected a GateEvaluation produced by gate.evaluate, got NoneType: an empty list is not ev",
+    "dict_with_no_failures": "refused: expected a GateEvaluation produced by gate.evaluate, got dict: an empty list is not eviden"
+  },
+  "baseline": {
+    "read_ok": true,
+    "baseline_id": "base-28ef411ac171e6da91dcf258",
+    "captured_at": "2026-08-30T03:59:07Z",
+    "carrier_ids": [
+      5462558501
+    ],
+    "run_ids": [
+      "36be3b65-5991-4dd1-8da9-de0e54baf434"
+    ]
+  },
+  "parser_on_real_32": {
+    "comments_seen": 1,
+    "answer_attributable_to_a_request": false,
+    "cause": "every run id on this surface is in the captured baseline; the pre-existing skip comment is not an answer to a request that does not exist",
+    "uncaptured_baseline": "refused: no baseline capture: an unobserved surface cannot be distinguished from an empty one"
+  },
+  "health": {
+    "all_fresh": true,
+    "not_fresh": [],
+    "states": {
+      "runtime": "FRESH",
+      "reconciliation": "FRESH",
+      "watchdog": "FRESH"
+    },
+    "ages": {
+      "runtime": 13,
+      "reconciliation": 13,
+      "watchdog": 20
+    },
+    "reconciliation_provenance": {
+      "comparisons_attempted": 2,
+      "comparisons_performed": 2,
+      "all_compared": true,
+      "per_pr": [
+        {
+          "pr_number": 8,
+          "scope_state": "RESOLVED",
+          "stored_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+          "github_head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+          "comparison_performed": true,
+          "drift_detected": false
+        },
+        {
+          "pr_number": 32,
+          "scope_state": "RESOLVED",
+          "stored_head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+          "github_head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+          "comparison_performed": true,
+          "drift_detected": false
+        }
+      ],
+      "source": "steady-state runtime, scoped reconciliation"
+    },
+    "watchdog_provenance": {
+      "last_watchdog_poll": "2026-08-30T03:58:48Z",
+      "watchdog_polls": 32171,
+      "source": "edge /healthz, value produced by the watchdog process",
+      "relayed_by": "primary sentinel",
+      "relayed_at": "2026-08-30T03:58:54Z"
+    }
+  },
+  "acceptance_rows": 0,
+  "provider_request_rows": 0,
+  "live": {
+    "32": {
+      "head": "7ad19f5e72a13a8fbd10ba9f6a2b0ea4bf430f52",
+      "governor_runs": [
+        {
+          "id": 99104297860,
+          "conclusion": "failure"
+        }
+      ],
+      "governor_comments": []
+    },
+    "8": {
+      "head": "2d8348703924c7470ba82f525cafc9afe720aee2",
+      "governor_runs": [
+        {
+          "id": 99099324325,
+          "conclusion": "failure"
+        }
+      ],
+      "governor_comments": []
+    }
+  },
+  "provider_network_writes": 0,
+  "production_success_writes": 0,
+  "reads_performed": 9,
+  "writes_performed": 0,
+  "stage": "A6f-c2 final positive-path authority and health closure",
+  "deployment": {
+    "commit": "3fde7d7999e1357b39b639d75ebb37c34da1c7c3",
+    "working_tree_clean": true,
+    "governor_runtime_started_at": "Sun 2026-08-30 03:58:10 UTC",
+    "governor_sentinel_started_at": "Sun 2026-08-30 03:58:10 UTC",
+    "note": "both services restarted after the commit; a daemon started before a commit is an old daemon however green systemctl looks"
+  },
+  "run_id_anchoring_on_the_real_surface": {
+    "pr_32": {
+      "coderabbit_carriers": 1,
+      "labelled_run_ids": 1,
+      "bare_uuids_in_body": 2,
+      "unlabelled_uuids_ignored": 1,
+      "skip_block_run_ids": [
+        "36be3b65-5991-4dd1-8da9-de0e54baf434"
+      ],
+      "review_block_run_ids": []
+    },
+    "pr_8": {
+      "coderabbit_carriers": 8,
+      "labelled_run_ids": 2,
+      "bare_uuids_in_body": 13,
+      "unlabelled_uuids_ignored": 11,
+      "skip_block_run_ids": [
+        "a3d2af24-8685-49a2-9e6e-728a59d8dcd4"
+      ],
+      "review_block_run_ids": [
+        "a765cb7e-2018-4a07-b66f-66539b83f8cd"
+      ],
+      "includes_rfc4122_examples_quoted_in_the_diff": [
+        "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+        "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      ]
+    },
+    "note": "a run id is read only where the provider labels it; content under review must not be able to manufacture the identifiers that prove a review happened"
+  },
+  "reconciliation_signal_history": {
+    "first_critical": "2026-08-26T10:27:38Z",
+    "last_critical": "2026-08-30T03:43:54Z",
+    "critical_pages": 67,
+    "recovery_at": "2026-08-30T03:54:26Z",
+    "cause": "the sentinel read last_complete_sweep_at, written by the reconcile loop the A6e cut-in retired; nothing produced that signal after the cut-in and the sentinel was correct to page"
+  },
+  "tests": {
+    "total": 436,
+    "failed": 0
+  },
+  "forbidden_actions_not_taken": [
+    "fresh /user probe for ACCEPT",
+    "live ACCEPT",
+    "Codex",
+    "CodeRabbit",
+    "SUCCESS patch",
+    "HEAD mutation on #32",
+    "merge",
+    "ruleset or App changes"
+  ]
+}
