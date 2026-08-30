@@ -1,0 +1,48 @@
+{
+  "stage": "A6g-c2.1 exact candidate and mutation pre-freeze",
+  "closes": "HEAD_B_PRE_PROVIDER_FREEZE",
+  "gap": "provider exposure begins at pull_request.opened, not at our POST; A6g saw CodeRabbit comment on #32 six seconds after it opened. A mutation registered after the PR exists is registered after the candidate has been seen.",
+  "base_sha": "047ff1a641e33e0bb8c6b9eea26bb80eea021e08",
+  "manifest": {
+    "specimen": {
+      "governor/pilot/a6h_probe.py": {
+        "sha256": "ede5ccdf0a22919e4e9c78c4d7073f3c9f223ff4e7b9ecac0c903ae25b28c598",
+        "bytes": 1479
+      },
+      "governor/pilot/test_a6h_probe.py": {
+        "sha256": "eb0202e533e072bd4188d5ff0b711aa267f1090d2be0099462e30eb748969826",
+        "bytes": 947
+      }
+    },
+    "mutation": {
+      "governor/pilot/a6h-head-move.txt": {
+        "sha256": "fe26505d216ddee8631424b1b843eb78de76ae6a185b8efc70deeedb7dc4b630",
+        "bytes": 367
+      }
+    }
+  },
+  "commit_messages": {
+    "head_a": "A6h probe: word-size accounting for EVM memory and copy costs",
+    "head_b": "A6h invalidation probe: move the disposable head after HEAD_A success"
+  },
+  "head_b_condition": "applied iff a SUCCESS on HEAD_A has been independently read back from the check run",
+  "specimen_self_test": {
+    "tests": 15,
+    "failed": 0,
+    "note": "the frozen suite is run against the frozen module by test_a6h_freeze.py"
+  },
+  "step_0_reordered": [
+    "0a freeze + remote readback",
+    "0b branch from frozen base",
+    "0c open PR",
+    "0d runtime opens epoch_A and run_A"
+  ],
+  "correction": "SECOND-ROUND.md said all of C1-C4 live in collector.associate; C1 (provider identity by App id) is enforced one level up in collector.admissibility. Corrected in the document.",
+  "actions_not_taken": [
+    "new branch",
+    "new PR",
+    "credentials",
+    "provider writes",
+    "#8"
+  ]
+}

@@ -35,7 +35,9 @@ carrier is currently showing. Derived from corpus, not documentation:
 ```
 
 It is admissible as `PROVIDER_NAMED_OUR_REQUEST` **only** under four
-constraints, all enforced in `collector.associate`:
+constraints. C1 is enforced one level up, in `collector.admissibility`,
+which checks provider identity for every carrier before association is
+considered at all; C2–C4 are enforced in `collector.associate`:
 
 ```text
 C1  the carrier's App id is 347564
@@ -74,6 +76,12 @@ cannot produce an independent second observation.
 The diff must be small, isolated, reviewable, and **chosen and recorded
 before any provider sees it**. It is never edited to obtain a clean review.
 
+Both the HEAD_A specimen and the HEAD_B mutation are frozen as bytes in
+`a6h-freeze/`, with digests, before the branch exists — see
+`a6h-freeze/FREEZE.md`. `base_sha` is
+`047ff1a641e33e0bb8c6b9eea26bb80eea021e08`; if `main` has moved when A6h
+begins, the freeze is void and a new one is written rather than rebased.
+
 ## Preregistered outcome mapping
 
 Frozen here so no result can be reclassified after it arrives.
@@ -109,8 +117,17 @@ HEAD_B not fail-closed inside the SLO   -> A6h FAIL
 Each numbered step needs its own GO. None is implied by the previous one.
 
 ```text
-0  create branch and PR from current main, record HEAD_A       (write)
-   wait for the deployed runtime to open epoch_A and create
+0a freeze the exact HEAD_A specimen and the exact HEAD_B mutation
+   in review-governance, push, and read the commit back from the
+   remote                                                      (no target write)
+
+0b create the disposable branch from the frozen base and build
+   HEAD_A from the frozen bytes; verify the tree with
+   `a6h-freeze/verify.py --specimen`                            (write)
+
+0c open the PR                                                  (write)
+
+0d wait for the deployed runtime to open epoch_A and create
    run_A by itself, within 52 s                                (no write)
 
 1  authorization preflight: at most one credential refresh,
@@ -134,8 +151,13 @@ Each numbered step needs its own GO. None is implied by the previous one.
    then delete the branch under the owner credential           (2 writes)
 ```
 
-The HEAD_B content is registered at step 0, before any provider sees the
-candidate, so the mutation cannot be selected in response to a review.
+The HEAD_B content is registered at **step 0a**, before the branch or the
+pull request exists. The earlier ordering registered it "at step 0", which
+was not the same claim: provider exposure begins at `pull_request.opened`,
+and A6g watched CodeRabbit comment on `#32` six seconds after it opened.
+A mutation registered after the PR exists is registered after the candidate
+has been seen, and "we chose it in advance" becomes an argument about
+commit timestamps instead of a fact on the remote.
 
 ## Forbidden throughout
 
