@@ -19,9 +19,11 @@ import auth_policy as ap  # noqa: E402
 import auth_state  # noqa: E402
 import collector  # noqa: E402
 import evidence  # noqa: E402
+import gate as gate_mod  # noqa: E402
 import predicates  # noqa: E402
 import publish  # noqa: E402
 import rounds  # noqa: E402
+import snapshots  # noqa: E402
 import triggers  # noqa: E402
 
 REPO = "PhysShell/evm-from-scratch"
@@ -38,6 +40,13 @@ def store(tmp_path):
 
 
 @pytest.fixture()
+def snaps(tmp_path):
+    s = snapshots.SnapshotStore(tmp_path / "snapshots.sqlite3")
+    yield s
+    s.close()
+
+
+@pytest.fixture()
 def fresh(tmp_path):
     a = auth_state.AuthStore(tmp_path / "auth.sqlite3")
     a.record(state="AUTHORIZED", auth_generation=5,
@@ -48,10 +57,20 @@ def fresh(tmp_path):
     a.close()
 
 
+def evaluated_gate(permission, head=A, pr=32):
+    """A real gate run. Since A6f-c2 the store will not take a list."""
+    return gate_mod.evaluate(
+        repo=REPO, pr_number=pr, head_sha=head, draft=False, base_ref="main",
+        ruleset_id=21640654, ruleset_verified=True,
+        carrier={"state": "CONFIRMED", "head_sha": head,
+                 "check_run_id": 99104297860},
+        permission=permission, open_generations=[])
+
+
 def accept(store, fresh, head=A):
     return store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                    head_sha=head, permission=fresh,
-                                   preconditions=[])
+                                   preconditions=evaluated_gate(fresh, head))
 
 
 # --- 1. durable acceptance -----------------------------------------------------
@@ -357,44 +376,55 @@ def test_the_snapshot_moves_when_the_comment_does():
 
 # --- 7. the bundle commits to evidence ----------------------------------------
 
-def qualified_record(provider):
-    return {"provider": provider, "generation": 1, "requested_for_head": A,
-            "state": "ANSWERED", "request_id": "req-x",
-            "request_carrier_id": 500,
+def qualified_record(snaps, provider, body="no issues found", findings=(),
+                     generation=1):
+    """A record whose digest comes from the durable row, not a re-derivation.
+
+    The bundle used to cite the digest `predicates` computed over its own
+    normalization, which committed it to a value the store never held. So
+    the payload is frozen first and the record quotes the stored row.
+    """
+    payload = {"id": 900, "provider": provider, "body": body,
+               "review_ran": True, "findings": list(findings), "head_claim": A}
+    snap = snaps.freeze(repo=REPO, pr_number=32, head_sha=A, provider=provider,
+                        generation=generation, request_id=f"req-{provider}",
+                        payload=payload, frozen_at="2026-08-30T00:00:00Z")
+    return {"provider": provider, "generation": generation,
+            "requested_for_head": A, "state": "ANSWERED",
+            "request_id": f"req-{provider}", "request_carrier_id": 500,
             "terminal": {"carrier_id": 900, "state": "ADMISSIBLE",
                          "admissible": True},
-            "predicate": predicates.evaluate(provider, {
-                "id": 900, "body": "no issues found", "review_ran": True,
-                "findings": [], "head_claim": A})}
+            "predicate": predicates.evaluate(provider, payload),
+            "snapshot_id": snap["snapshot_id"],
+            "snapshot_digest": snap["snapshot_digest"]}
 
 
-def test_bundle_carries_the_snapshot_digest_not_a_boolean(fresh):
+def test_bundle_carries_the_snapshot_digest_not_a_boolean(fresh, snaps):
+    rec = qualified_record(snaps, "codex")
     b = evidence.build_bundle(repo=REPO, pr_number=32, head_sha=A,
-                              lineage_records=[qualified_record("codex")],
-                              auth_generation=5)
+                              lineage_records=[rec], auth_generation=5)
     p = b["providers"][0]
     assert p["snapshot_digest"] and p["terminal_carrier_id"] == 900
     assert p["predicate_schema"] == predicates.SCHEMA_REVISION
+    assert p["snapshot_digest"] == snaps.snapshot(rec["snapshot_id"])["snapshot_digest"]
 
 
-def test_bundle_hash_moves_when_the_evidence_moves(fresh):
+def test_bundle_hash_moves_when_the_evidence_moves(fresh, snaps):
     a = evidence.build_bundle(repo=REPO, pr_number=32, head_sha=A,
-                              lineage_records=[qualified_record("codex")],
+                              lineage_records=[qualified_record(snaps, "codex")],
                               auth_generation=5)
-    changed = qualified_record("codex")
-    changed["predicate"] = predicates.evaluate("codex", {
-        "id": 900, "body": "on reflection, a bug", "review_ran": True,
-        "findings": [{"x": 1}], "head_claim": A})
+    changed = qualified_record(snaps, "codex", body="on reflection, a bug",
+                               findings=[{"x": 1}], generation=2)
     b = evidence.build_bundle(repo=REPO, pr_number=32, head_sha=A,
                               lineage_records=[changed], auth_generation=5)
     assert a["bundle_hash"] != b["bundle_hash"]
 
 
-def test_inadmissible_evidence_cannot_reduce_to_success(fresh):
-    rec = qualified_record("codex")
+def test_inadmissible_evidence_cannot_reduce_to_success(fresh, snaps):
+    rec = qualified_record(snaps, "codex")
     rec["terminal"] = {"carrier_id": 900, "state": collector.PREEXISTING,
                        "admissible": False}
-    other = qualified_record("coderabbit")
+    other = qualified_record(snaps, "coderabbit")
     b = evidence.build_bundle(repo=REPO, pr_number=32, head_sha=A,
                               lineage_records=[rec, other], auth_generation=5)
     red = evidence.reduce(b, current_head_sha=A, permission=fresh,
@@ -403,25 +433,34 @@ def test_inadmissible_evidence_cannot_reduce_to_success(fresh):
     assert any("not admissible" in r for r in red["refusals"])
 
 
-def test_findings_in_the_bundle_cannot_reduce_to_success(fresh):
-    rec = qualified_record("codex")
-    rec["predicate"] = predicates.evaluate("codex", {
-        "id": 900, "body": "bug", "review_ran": True,
-        "findings": [{"x": 1}], "head_claim": A})
-    b = evidence.build_bundle(repo=REPO, pr_number=32, head_sha=A,
-                              lineage_records=[rec, qualified_record("coderabbit")],
-                              auth_generation=5)
+def test_findings_in_the_bundle_cannot_reduce_to_success(fresh, snaps):
+    rec = qualified_record(snaps, "codex", body="bug", findings=[{"x": 1}])
+    b = evidence.build_bundle(
+        repo=REPO, pr_number=32, head_sha=A, auth_generation=5,
+        lineage_records=[rec, qualified_record(snaps, "coderabbit")])
     red = evidence.reduce(b, current_head_sha=A, permission=fresh,
                           auth_generation=5)
     assert red["verdict"] == evidence.NOT_ESTABLISHED
     assert any("findings reported" in r for r in red["refusals"])
 
 
-def test_a_fully_qualified_bundle_reduces_to_success(fresh):
+def test_a_bundle_without_a_frozen_snapshot_cannot_reduce_to_success(fresh, snaps):
+    rec = qualified_record(snaps, "codex")
+    rec["snapshot_id"] = rec["snapshot_digest"] = None
     b = evidence.build_bundle(
         repo=REPO, pr_number=32, head_sha=A, auth_generation=5,
-        lineage_records=[qualified_record("codex"),
-                         qualified_record("coderabbit")])
+        lineage_records=[rec, qualified_record(snaps, "coderabbit")])
+    red = evidence.reduce(b, current_head_sha=A, permission=fresh,
+                          auth_generation=5)
+    assert red["verdict"] == evidence.NOT_ESTABLISHED
+    assert any("commits to nothing" in r for r in red["refusals"])
+
+
+def test_a_fully_qualified_bundle_reduces_to_success(fresh, snaps):
+    b = evidence.build_bundle(
+        repo=REPO, pr_number=32, head_sha=A, auth_generation=5,
+        lineage_records=[qualified_record(snaps, "codex"),
+                         qualified_record(snaps, "coderabbit")])
     red = evidence.reduce(b, current_head_sha=A, permission=fresh,
                           auth_generation=5)
     assert red["verdict"] == evidence.SUCCESS, red["refusals"]
@@ -437,11 +476,11 @@ class FakeEpochs:
         self.last = kw
 
 
-def _ok(fresh):
+def _ok(fresh, snaps):
     b = evidence.build_bundle(
         repo=REPO, pr_number=32, head_sha=A, auth_generation=5,
-        lineage_records=[qualified_record("codex"),
-                         qualified_record("coderabbit")])
+        lineage_records=[qualified_record(snaps, "codex"),
+                         qualified_record(snaps, "coderabbit")])
     return b, evidence.reduce(b, current_head_sha=A, permission=fresh,
                               auth_generation=5)
 
@@ -456,8 +495,8 @@ def _health(all_fresh=True, not_fresh=()):
 HEALTH = _health()
 
 
-def test_success_may_not_create_a_second_carrier(fresh):
-    b, red = _ok(fresh)
+def test_success_may_not_create_a_second_carrier(fresh, snaps):
+    b, red = _ok(fresh, snaps)
     with pytest.raises(publish.PublishRefused):
         publish.publish(lambda *a, **k: (201, {"id": 1}), repo=REPO,
                         epoch_id=EPOCH, head_sha=A, conclusion="success",
@@ -468,8 +507,8 @@ def test_success_may_not_create_a_second_carrier(fresh):
 
 @pytest.mark.parametrize("stale_component",
                          ["runtime", "reconciliation", "watchdog"])
-def test_stale_runtime_health_refuses_success(fresh, stale_component):
-    b, red = _ok(fresh)
+def test_stale_runtime_health_refuses_success(fresh, snaps, stale_component):
+    b, red = _ok(fresh, snaps)
     health = _health(all_fresh=False, not_fresh=[stale_component])
     checked = publish.guard(reduction=red, bundle=b, current_head_sha=A,
                             permission=fresh, health=health,
@@ -478,8 +517,8 @@ def test_stale_runtime_health_refuses_success(fresh, stale_component):
     assert any(stale_component in r for r in checked["refusals"])
 
 
-def test_success_confirmed_only_on_full_identity(fresh):
-    b, red = _ok(fresh)
+def test_success_confirmed_only_on_full_identity(fresh, snaps):
+    b, red = _ok(fresh, snaps)
 
     def request(method, path, body=None):
         if method == "GET":
@@ -500,8 +539,8 @@ def test_success_confirmed_only_on_full_identity(fresh):
     ("app", {"id": 999}), ("head_sha", B), ("external_id", "pe-other"),
     ("name", "ai/something-else"),
 ])
-def test_a_readback_that_differs_in_identity_is_not_confirmed(fresh, field, bad):
-    b, red = _ok(fresh)
+def test_a_readback_that_differs_in_identity_is_not_confirmed(fresh, snaps, field, bad):
+    b, red = _ok(fresh, snaps)
     good = {"id": 99104297860, "name": "ai/final-review",
             "app": {"id": 4669438}, "head_sha": A, "external_id": EPOCH,
             "conclusion": "success"}

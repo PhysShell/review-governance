@@ -389,12 +389,18 @@ def test_no_module_here_can_post_a_provider_request():
 
 # --- the reducer and the positive path ----------------------------------------
 
-def qualified_records(permission, head=H8):
+def qualified_records(permission, head=H8, snaps=None):
     """A6f shape: admissibility and a provider predicate, not the A6a
     boolean. The old helper produced records whose `qualified` said nothing
-    about findings, which is precisely the defect A6f closed."""
+    about findings, which is precisely the defect A6f closed.
+
+    Since A6f-c2 the record also has to cite a durable snapshot, so the
+    payload is frozen here rather than described — the reducer refuses a
+    bundle that commits to no stored evidence."""
     import collector
     import predicates
+    import snapshots
+    snaps = snaps or snapshots.SnapshotStore(":memory:")
     out = []
     for provider in ("codex", "coderabbit"):
         r = lineage.request(repo=REPO, pr_number=8, provider=provider,
@@ -404,13 +410,19 @@ def qualified_records(permission, head=H8):
         r = lineage.attest(r, carrier_id=2, carrier_head_claim=head,
                            carrier_updated_at="t", current_head=head)
         r = lineage.qualify(r, current_head=head)
-        r["request_id"] = "req-x"
+        payload = {"id": 2, "provider": provider, "body": "no issues found",
+                   "review_ran": True, "findings": [], "head_claim": head}
+        snap = snaps.freeze(repo=REPO, pr_number=8, head_sha=head,
+                            provider=provider, generation=1,
+                            request_id=f"req-{provider}", payload=payload,
+                            frozen_at="t")
+        r["request_id"] = f"req-{provider}"
         r["request_carrier_id"] = 1
         r["terminal"] = {"carrier_id": 2, "state": collector.ADMISSIBLE,
                          "admissible": True}
-        r["predicate"] = predicates.evaluate(provider, {
-            "id": 2, "body": "no issues found", "review_ran": True,
-            "findings": [], "head_claim": head})
+        r["predicate"] = predicates.evaluate(provider, payload)
+        r["snapshot_id"] = snap["snapshot_id"]
+        r["snapshot_digest"] = snap["snapshot_digest"]
         out.append(r)
     return out
 

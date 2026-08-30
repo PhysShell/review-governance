@@ -107,7 +107,14 @@ class RoundStore:
     # --- acceptances ------------------------------------------------------
     def record_acceptance(self, *, repo, pr_number, epoch_id, head_sha,
                           permission, preconditions, accepted_at=None):
-        """`preconditions` is the full ACCEPT gate result, not a courtesy.
+        """`preconditions` must be a GateEvaluation, not a list.
+
+        The previous version accepted any empty list, so a caller with a
+        fresh permission could assert that the gate had passed without it
+        ever running. An empty list is not evidence that anything was
+        evaluated; a GateEvaluation names the repo, PR, head and
+        authorization observation it was computed against, and this store
+        re-checks that they are the ones it is about to write.
 
         Previously this wrote a durable ACCEPTED after checking only the
         SHA length and the permission, so `accept.preconditions()` could
@@ -116,13 +123,13 @@ class RoundStore:
         agree. Requiring the evaluated failure list here makes bypassing it
         impossible rather than discouraged.
         """
-        if preconditions is None:
-            raise RoundError(
-                "an acceptance requires the evaluated precondition result; "
-                "this store will not assume the gate was run")
-        if preconditions:
-            raise RoundError(
-                "acceptance refused by preconditions: " + "; ".join(preconditions))
+        import gate as gate_mod
+        try:
+            gate_mod.require_matching(preconditions, repo=repo,
+                                      pr_number=pr_number, head_sha=head_sha,
+                                      permission=permission)
+        except gate_mod.GateError as exc:
+            raise RoundError(str(exc)) from None
         if len(head_sha or "") != 40:
             raise RoundError("an acceptance must name the full head")
         if not getattr(permission, "permits_action", False):

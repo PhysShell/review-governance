@@ -18,6 +18,7 @@ sys.path.insert(0, str(HERE.parents[0] / "operational-readiness" / "harness"))
 import auth_policy as ap  # noqa: E402
 import auth_state  # noqa: E402
 import collector  # noqa: E402
+import gate as gate_mod  # noqa: E402
 import health as health_mod  # noqa: E402
 import parsers  # noqa: E402
 import predicates  # noqa: E402
@@ -52,6 +53,15 @@ def fresh(tmp_path):
     a.close()
 
 
+def evaluated_gate(permission, head=A):
+    return gate_mod.evaluate(
+        repo=REPO, pr_number=32, head_sha=head, draft=False, base_ref="main",
+        ruleset_id=21640654, ruleset_verified=True,
+        carrier={"state": "CONFIRMED", "head_sha": head,
+                 "check_run_id": 99104297860},
+        permission=permission, open_generations=[])
+
+
 # --- 1. the ACCEPT gate cannot be bypassed ------------------------------------
 
 def test_durable_acceptance_refuses_without_the_evaluated_gate(store, fresh):
@@ -61,22 +71,28 @@ def test_durable_acceptance_refuses_without_the_evaluated_gate(store, fresh):
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
                                 preconditions=None)
-    assert "will not assume the gate was run" in str(exc.value)
+    assert "not evidence that the gate ran" in str(exc.value)
     assert store.acceptances_for(REPO, 32) == []
 
 
 def test_durable_acceptance_refuses_a_failed_gate(store, fresh):
+    failed = gate_mod.evaluate(
+        repo=REPO, pr_number=32, head_sha=A, draft=True, base_ref="main",
+        ruleset_id=21640654, ruleset_verified=True,
+        carrier={"state": "CONFIRMED", "head_sha": A},
+        permission=fresh, open_generations=[])
+    assert failed.passed is False
     with pytest.raises(rounds.RoundError):
         store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                 head_sha=A, permission=fresh,
-                                preconditions=["PR is a draft"])
+                                preconditions=failed)
     assert store.acceptances_for(REPO, 32) == []
 
 
 def test_a_passed_gate_records(store, fresh):
     acc = store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                   head_sha=A, permission=fresh,
-                                  preconditions=[])
+                                  preconditions=evaluated_gate(fresh))
     assert acc["state"] == rounds.ACCEPTED
 
 
@@ -85,7 +101,7 @@ def test_a_passed_gate_records(store, fresh):
 def _accepted(store, fresh):
     return store.record_acceptance(repo=REPO, pr_number=32, epoch_id=EPOCH,
                                    head_sha=A, permission=fresh,
-                                   preconditions=[])
+                                   preconditions=evaluated_gate(fresh))
 
 
 def test_intent_records_observation_and_generation(store, fresh):
@@ -197,35 +213,55 @@ def test_a_raw_carrier_carrying_conclusions_is_refused():
         parsers.reject_synthetic({"id": 1, "findings": []})
 
 
+def captured(snaps, comments, provider="coderabbit", read_ok=True,
+             pr_number=32):
+    """A baseline the way the driver produces one: read, then frozen.
+
+    Written through the store rather than assembled inline, because
+    `require_baseline` now refuses a caller's dict — an unread surface and
+    an empty one are otherwise the same object.
+    """
+    app = triggers.PROVIDER_APP_ID[provider]
+    row = snaps.capture_baseline(
+        repo=REPO, pr_number=pr_number, provider=provider, read_ok=read_ok,
+        payload=parsers.baseline(comments, provider_app=app),
+        captured_at="2026-08-29T13:59:00Z")
+    return {**row["payload"], "baseline_id": row["baseline_id"],
+            "read_ok": row["read_ok"], "captured_at": row["captured_at"]}
+
+
 def test_baseline_freezes_run_ids_before_the_trigger():
     base = parsers.baseline(
         [{"id": 5349895008, "user": {"login": "coderabbitai[bot]"},
-          "body": f"run {RUN}", "updated_at": "2026-08-20T01:03:30Z",
+          "body": f"**Run ID**: `{RUN}`", "updated_at": "2026-08-20T01:03:30Z",
           "performed_via_github_app": {"id": 347564}}],
         provider_app=347564)
     assert base["run_ids"] == [RUN]
     assert 5349895008 in base["carrier_ids"]
 
 
-def test_a_sticky_rewritten_with_a_new_run_is_our_answer():
-    base = {"captured_at": "2026-08-29T13:59:00Z",
-            "run_ids": [RUN], "carrier_ids": [5349895008],
-            "digests": {5349895008: parsers.body_digest("old body")},
-            "updated_at": {}}
+def test_a_sticky_rewritten_with_a_new_run_is_our_answer(snaps):
+    base = captured(snaps, [
+        {"id": 5349895008, "user": {"login": "coderabbitai[bot]"},
+         "body": f"old body **Run ID**: `{RUN}`",
+         "updated_at": "2026-08-20T01:03:30Z",
+         "performed_via_github_app": {"id": 347564}}])
     out = parsers.parse_coderabbit(
         [{"id": 5349895008, "user": {"login": "coderabbitai[bot]"},
           "created_at": "2026-08-20T01:03:30Z",
           "updated_at": "2026-08-29T11:10:50Z",
-          "body": f"Actionable comments posted: 0\n{A}\nrun {NEW_RUN}"}],
+          "body": f"Actionable comments posted: 0\n"
+                  f"Reviewing files that changed between "
+                  f"add0a0975eb499491eefe9f83d971152153d8106 and {A}.\n"
+                  f"**Run ID**: `{NEW_RUN}`"}],
         base=base, requested_head=A, generation=1)
     assert out["carrier_was_rewritten"] is True
     assert out["new_run_ids"] == [NEW_RUN]
     assert out["head_claim"] == A and out["findings"] == []
 
 
-def test_the_preexisting_skip_comment_yields_no_answer():
-    base = {"captured_at": "t", "run_ids": [], "carrier_ids": [],
-            "digests": {}, "updated_at": {}}
+def test_the_preexisting_skip_comment_yields_no_answer(snaps):
+    base = captured(snaps, [])
     out = parsers.parse_coderabbit(
         [{"id": 5462558501, "user": {"login": "coderabbitai[bot]"},
           "created_at": "2026-08-29T13:01:15Z",
@@ -235,21 +271,20 @@ def test_the_preexisting_skip_comment_yields_no_answer():
     assert out is None, "a carrier with no new run id is not our answer"
 
 
-def test_actionable_count_absent_is_not_zero():
-    base = {"captured_at": "t", "run_ids": [], "carrier_ids": [],
-            "digests": {}, "updated_at": {}}
+def test_actionable_count_absent_is_not_zero(snaps):
+    base = captured(snaps, [])
     out = parsers.parse_coderabbit(
         [{"id": 1, "user": {"login": "coderabbitai[bot]"},
           "created_at": "t", "updated_at": "t",
-          "body": f"Review completed. status: success {A} run {NEW_RUN}"}],
+          "body": f"Review completed. status: success {A}\n"
+                  f"**Run ID**: `{NEW_RUN}`"}],
         base=base, requested_head=A, generation=1)
     assert out["findings"] is None
     assert predicates.evaluate("coderabbit", out)["state"] == predicates.NOT_POSITIVE
 
 
-def test_codex_clean_review_may_arrive_as_a_reaction():
-    base = {"captured_at": "t", "run_ids": [], "carrier_ids": [],
-            "digests": {}, "updated_at": {}}
+def test_codex_clean_review_may_arrive_as_a_reaction(snaps):
+    base = captured(snaps, [], provider="codex")
     out = parsers.parse_codex(
         [], [{"id": 7, "content": "+1", "created_at": "t",
               "user": {"login": "chatgpt-codex-connector[bot]"}}],
@@ -259,9 +294,8 @@ def test_codex_clean_review_may_arrive_as_a_reaction():
     assert out["head_claim"] is None, "a reaction attests no head"
 
 
-def test_codex_findings_comment_is_parsed_as_findings():
-    base = {"captured_at": "t", "run_ids": [], "carrier_ids": [],
-            "digests": {}, "updated_at": {}}
+def test_codex_findings_comment_is_parsed_as_findings(snaps):
+    base = captured(snaps, [], provider="codex")
     out = parsers.parse_codex(
         [{"id": 9, "user": {"login": "chatgpt-codex-connector[bot]"},
           "created_at": "t", "updated_at": "t",
@@ -271,9 +305,8 @@ def test_codex_findings_comment_is_parsed_as_findings():
     assert predicates.evaluate("codex", out)["state"] == predicates.NOT_POSITIVE
 
 
-def test_no_answer_at_all_is_not_a_clean_review():
-    base = {"captured_at": "t", "run_ids": [], "carrier_ids": [],
-            "digests": {}, "updated_at": {}}
+def test_no_answer_at_all_is_not_a_clean_review(snaps):
+    base = captured(snaps, [], provider="codex")
     assert parsers.parse_codex([], [], base=base, requested_head=A,
                                generation=1, request_carrier_id=500) is None
 
@@ -400,18 +433,17 @@ def test_an_uncaptured_baseline_is_refused():
                             request_carrier_id=1)
 
 
-def test_a_captured_baseline_containing_the_run_rejects_the_carrier():
+def test_a_captured_baseline_containing_the_run_rejects_the_carrier(snaps):
     """The real skip comment, with its run id already in the baseline."""
-    base = parsers.baseline(
-        [{"id": 5462558501, "user": {"login": "coderabbitai[bot]"},
-          "body": "skip review e9bb8d72-00e8-4f67-9cb2-caf3b22574fe",
-          "updated_at": "2026-08-29T13:01:15Z",
-          "performed_via_github_app": {"id": 347564}}],
-        provider_app=347564)
+    body = f"skip review by coderabbit.ai\n**Run ID**: `{RUN}`"
+    base = captured(snaps, [
+        {"id": 5462558501, "user": {"login": "coderabbitai[bot]"},
+         "body": body, "updated_at": "2026-08-29T13:01:15Z",
+         "performed_via_github_app": {"id": 347564}}])
+    assert base["run_ids"] == [RUN]
     out = parsers.parse_coderabbit(
         [{"id": 5462558501, "user": {"login": "coderabbitai[bot]"},
           "created_at": "2026-08-29T13:01:15Z",
-          "updated_at": "2026-08-29T13:01:15Z",
-          "body": "skip review e9bb8d72-00e8-4f67-9cb2-caf3b22574fe"}],
+          "updated_at": "2026-08-29T13:01:15Z", "body": body}],
         base=base, requested_head=A, generation=1)
     assert out is None

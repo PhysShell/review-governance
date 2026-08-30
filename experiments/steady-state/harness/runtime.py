@@ -40,6 +40,7 @@ sys.path.insert(0, str(_HERE.parents[1] / "operational-readiness" / "harness"))
 import carrier
 import epochs as ep
 import governor
+import rounds
 import scoped_reconcile as sr
 
 CONFIG_DIR = Path(os.environ.get(
@@ -67,7 +68,7 @@ def open_prs(request, repo, base):
             for p in sorted(pulls or [], key=lambda p: p["number"])]
 
 
-def handle(request, repo, pull, store, write_enabled=True):
+def handle(request, repo, pull, store, write_enabled=True, round_store=None):
     """One PR, one pass. Returns what was observed and what was done."""
     pr = pull["pr_number"]
     head = pull["head_sha"]
@@ -92,6 +93,13 @@ def handle(request, repo, pull, store, write_enabled=True):
         # overwritten: the question "when did this head become current"
         # must survive whatever happens next.
         outcome["head_transition"] = {"from": known["head_sha"], "to": head}
+        # An acceptance is about a commit. When that commit stops being the
+        # head, the acceptance must be marked here, in the loop that
+        # actually observes the move — a method that can do it is not the
+        # same thing as a production transition that does.
+        if round_store is not None:
+            outcome["invalidated_acceptances"] = \
+                round_store.invalidate_for_head_move(repo, pr, head)
 
     if not write_enabled:
         outcome["action"] = "DRY_RUN"
@@ -104,12 +112,14 @@ def handle(request, repo, pull, store, write_enabled=True):
     return outcome
 
 
-def pass_once(request, repo, base, store, write_enabled=True):
+def pass_once(request, repo, base, store, write_enabled=True,
+              round_store=None):
     pulls = open_prs(request, repo, base)
     if pulls is None:
         return {"at": utcnow(), "state": "UNREADABLE",
                 "cause": "cannot list open PRs; nothing is assumed"}
-    outcomes = [handle(request, repo, p, store, write_enabled) for p in pulls]
+    outcomes = [handle(request, repo, p, store, write_enabled, round_store)
+                for p in pulls]
     reconciliations = [
         sr.reconcile(request, repo, p["pr_number"], store)
         for p in pulls if not p["draft"]]
@@ -129,6 +139,32 @@ def write_health(path, result):
     }, indent=2) + "\n")
 
 
+def write_reconciliation_health(path, result):
+    """Asserts that scoped comparisons actually ran, not that a file is new.
+
+    An age check on a file proves a process is alive. What a success guard
+    needs to know is narrower: that for every non-draft PR a scoped
+    comparison was performed, with which stored and current heads. So the
+    signal carries the comparisons themselves.
+    """
+    recs = [r for r in (result.get("reconciliations") or [])]
+    compared = [r for r in recs if r.get("comparison_performed")]
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps({
+        "last_complete_pass_at": result.get("at"),
+        "comparisons_attempted": len(recs),
+        "comparisons_performed": len(compared),
+        "all_compared": len(recs) > 0 and len(compared) == len(recs),
+        "per_pr": [{"pr_number": r["pr_number"],
+                    "scope_state": r.get("scope_state"),
+                    "stored_head": r.get("stored_head"),
+                    "github_head": r.get("github_head"),
+                    "comparison_performed": r.get("comparison_performed"),
+                    "drift_detected": r.get("drift_detected")} for r in recs],
+        "source": "steady-state runtime, scoped reconciliation",
+    }, indent=2) + "\n")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--repo", default="PhysShell/evm-from-scratch")
@@ -140,19 +176,25 @@ def main():
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--dry-run", action="store_true",
                     help="observe and report without creating any carrier")
+    ap.add_argument("--rounds-db", default=str(CONFIG_DIR / "rounds.sqlite3"))
     ap.add_argument("--health-file", default=str(HEALTH_FILE))
+    ap.add_argument("--reconciliation-health",
+                    default=str(CONFIG_DIR / "reconciliation-health.json"))
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     store = ep.EpochStore(args.db)
+    round_store = rounds.RoundStore(args.rounds_db)
     try:
         token = governor.installation_token()
         request = make_request(token)
         if args.once:
             result = pass_once(request, args.repo, args.base, store,
-                               write_enabled=not args.dry_run)
+                               write_enabled=not args.dry_run,
+                               round_store=round_store)
             if result["state"] == "OK" and not args.dry_run:
                 write_health(args.health_file, result)
+                write_reconciliation_health(args.reconciliation_health, result)
             rendered = json.dumps(result, indent=2, default=str)
             if args.out:
                 Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -168,15 +210,18 @@ def main():
             # quietly.
             request = make_request(governor.installation_token())
             result = pass_once(request, args.repo, args.base, store,
-                               write_enabled=not args.dry_run)
+                               write_enabled=not args.dry_run,
+                               round_store=round_store)
             if result["state"] == "OK" and not args.dry_run:
                 write_health(args.health_file, result)
+                write_reconciliation_health(args.reconciliation_health, result)
             if result.get("writes"):
                 print(json.dumps(result, default=str), flush=True)
             time.sleep(args.interval)
         return 0
     finally:
         store.close()
+        round_store.close()
 
 
 if __name__ == "__main__":

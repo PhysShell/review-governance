@@ -27,6 +27,22 @@ CREATE TABLE IF NOT EXISTS evidence_snapshots (
     payload          TEXT NOT NULL,
     frozen_at        TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS baselines (
+    baseline_id     TEXT PRIMARY KEY,
+    baseline_digest TEXT NOT NULL,
+    repo            TEXT NOT NULL,
+    pr_number       INTEGER NOT NULL,
+    provider        TEXT NOT NULL,
+    read_ok         INTEGER NOT NULL,
+    payload         TEXT NOT NULL,
+    captured_at     TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS baselines_immutable_update
+BEFORE UPDATE ON baselines
+BEGIN SELECT RAISE(ABORT, 'a captured baseline cannot be rewritten'); END;
+CREATE TRIGGER IF NOT EXISTS baselines_immutable_delete
+BEFORE DELETE ON baselines
+BEGIN SELECT RAISE(ABORT, 'a captured baseline cannot be deleted'); END;
 CREATE TRIGGER IF NOT EXISTS snapshots_immutable_update
 BEFORE UPDATE ON evidence_snapshots
 BEGIN SELECT RAISE(ABORT, 'a frozen snapshot cannot be rewritten'); END;
@@ -64,6 +80,15 @@ class SnapshotStore:
         sid = "snap-" + digest[:24]
         existing = self.snapshot(sid)
         if existing:
+            scope = (existing["repo"], existing["pr_number"],
+                     existing["head_sha"], existing["provider"],
+                     existing["generation"], existing["request_id"])
+            if scope != (repo, int(pr_number), head_sha, provider,
+                         int(generation), request_id):
+                raise SnapshotError(
+                    "a snapshot with this digest exists under a different "
+                    "scope; identical payloads from different rounds must "
+                    "not share provenance")
             return existing
         self.conn.execute(
             "INSERT INTO evidence_snapshots (snapshot_id, snapshot_digest,"
@@ -75,6 +100,44 @@ class SnapshotStore:
         self.conn.commit()
         return self.snapshot(sid)
 
+    def capture_baseline(self, *, repo, pr_number, provider, read_ok,
+                         payload, captured_at):
+        """A baseline is a *read*, and a failed read is not an empty one.
+
+        `read_ok` is stored rather than inferred, because an observed empty
+        provider surface is perfectly valid on a new PR while an
+        unobserved one is not, and the two are otherwise identical.
+        """
+        digest = digest_of(payload)
+        bid = "base-" + digest[:24]
+        existing = self.baseline(bid)
+        if existing:
+            if (existing["repo"], existing["pr_number"], existing["provider"]) \
+                    != (repo, int(pr_number), provider):
+                raise SnapshotError(
+                    "a baseline with this digest exists for another scope; "
+                    "refusing to return somebody else's provenance")
+            return existing
+        self.conn.execute(
+            "INSERT INTO baselines (baseline_id, baseline_digest, repo,"
+            " pr_number, provider, read_ok, payload, captured_at)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (bid, digest, repo, int(pr_number), provider, 1 if read_ok else 0,
+             json.dumps(payload, sort_keys=True), captured_at))
+        self.conn.commit()
+        return self.baseline(bid)
+
+    def baseline(self, baseline_id):
+        row = self.conn.execute(
+            "SELECT * FROM baselines WHERE baseline_id=?",
+            (baseline_id,)).fetchone()
+        if not row:
+            return None
+        out = dict(row)
+        out["payload"] = json.loads(out["payload"])
+        out["read_ok"] = bool(out["read_ok"])
+        return out
+
     def snapshot(self, snapshot_id):
         row = self.conn.execute(
             "SELECT * FROM evidence_snapshots WHERE snapshot_id=?",
@@ -83,6 +146,35 @@ class SnapshotStore:
             return None
         out = dict(row)
         out["payload"] = json.loads(out["payload"])
+        return out
+
+    def replay_scoped(self, snapshot_id, predicate_fn, *, repo, pr_number,
+                      head_sha, provider, generation, request_id,
+                      expected_digest):
+        """Replay bound to the round that claims it.
+
+        A digest that reproduces proves the payload is intact. It does not
+        prove the payload is *this* round's evidence, which is what the
+        bundle is asserting when it cites a snapshot id.
+        """
+        snap = self.snapshot(snapshot_id)
+        if not snap:
+            raise SnapshotError(f"no snapshot {snapshot_id}")
+        envelope = {
+            "repo": snap["repo"] == repo,
+            "pr_number": snap["pr_number"] == int(pr_number),
+            "head_sha": snap["head_sha"] == head_sha,
+            "provider": snap["provider"] == provider,
+            "generation": snap["generation"] == int(generation),
+            "request_id": snap["request_id"] == request_id,
+            "digest": snap["snapshot_digest"] == expected_digest,
+        }
+        if not all(envelope.values()):
+            raise SnapshotError(
+                f"snapshot envelope does not match the round citing it: "
+                f"{[k for k, v in envelope.items() if not v]}")
+        out = self.replay(snapshot_id, predicate_fn)
+        out["envelope"] = envelope
         return out
 
     def replay(self, snapshot_id, predicate_fn):

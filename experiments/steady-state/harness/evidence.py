@@ -56,7 +56,12 @@ def build_bundle(*, repo, pr_number, head_sha, lineage_records,
               "predicate_schema": (r.get("predicate") or {}).get("schema_revision"),
               "predicate_state": (r.get("predicate") or {}).get("state"),
               "findings_count": (r.get("predicate") or {}).get("findings_count"),
-              "snapshot_digest": (r.get("predicate") or {}).get("snapshot_digest"),
+              # The digest of the DURABLE row, not the one predicates
+              # computed over its own normalization. Citing the second
+              # committed the bundle to a value the store never held.
+              "snapshot_id": r.get("snapshot_id"),
+              "snapshot_digest": r.get("snapshot_digest"),
+              "request_id": r.get("request_id"),
               "qualified": ((r.get("predicate") or {}).get("state")
                             == "ADVISORY_POSITIVE"
                             and bool((r.get("terminal") or {}).get("admissible")))}
@@ -109,7 +114,7 @@ def reduce(bundle, *, current_head_sha, permission, auth_generation):
     if inadmissible:
         reasons.append(f"evidence not admissible for: {sorted(set(inadmissible))}")
     unsnapshotted = [p["provider"] for p in bundle.get("providers", [])
-                     if not p.get("snapshot_digest")]
+                     if not p.get("snapshot_digest") or not p.get("snapshot_id")]
     if unsnapshotted:
         reasons.append(
             f"no frozen snapshot for {sorted(set(unsnapshotted))}; a bundle "
@@ -140,3 +145,33 @@ def reduce(bundle, *, current_head_sha, permission, auth_generation):
         "note": "SUCCESS requires every condition; NOT_ESTABLISHED is the "
                 "default and is reached by any single failure",
     }
+
+
+def verify_against_snapshots(bundle, store, predicate_fn):
+    """Re-derive every provider verdict from the durable rows.
+
+    The bundle asserts a snapshot id and a digest; this loads that exact
+    row, checks its envelope against the round citing it, recomputes the
+    digest from the stored bytes and re-runs the frozen predicate. A
+    bundle that cannot be reproduced this way is not evidence, whatever it
+    hashes to.
+    """
+    results = []
+    for p in bundle.get("providers", []):
+        try:
+            replay = store.replay_scoped(
+                p["snapshot_id"], predicate_fn,
+                repo=bundle["repo"], pr_number=bundle["pr_number"],
+                head_sha=bundle["head_sha"], provider=p["provider"],
+                generation=p["generation"], request_id=p["request_id"],
+                expected_digest=p["snapshot_digest"])
+        except Exception as exc:
+            results.append({"provider": p["provider"], "reproduced": False,
+                            "cause": f"{type(exc).__name__}: {exc}"})
+            continue
+        same = replay["predicate"]["state"] == p["predicate_state"]
+        results.append({"provider": p["provider"], "reproduced": same,
+                        "replayed_state": replay["predicate"]["state"],
+                        "bundle_state": p["predicate_state"]})
+    return {"all_reproduced": bool(results) and all(r["reproduced"] for r in results),
+            "results": results}

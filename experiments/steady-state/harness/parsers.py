@@ -36,22 +36,43 @@ def _utcnow():
 
 
 def require_baseline(base):
-    """A baseline must have been captured, not merely be empty.
+    """A baseline must be an *observation*, and a failed read is not one.
 
-    Found live: passing `{"run_ids": []}` made every pre-existing run id
-    look new, so the skip comment on #32 parsed as an answer to a request
-    that had not been made. An unestablished baseline is not an empty one —
-    the same substitution as every other absence in this programme, this
-    time inside the module written to catch it.
+    An observed empty surface is perfectly valid — a brand-new PR really
+    has no previous runs. What is refused is an unobserved one: without a
+    successful read, every existing run id looks new and a carrier that
+    predates the request parses as its answer.
+
+    So `read_ok` is the field that matters, not emptiness, and the payload
+    must come from a durable capture rather than from a caller's dict.
     """
     if not isinstance(base, dict) or not base.get("captured_at"):
         raise ParseRefused(
-            "no baseline capture: without a pre-request snapshot every "
-            "existing run id looks new, and a carrier that predates the "
-            "request parses as its answer")
+            "no baseline capture: an unobserved surface cannot be "
+            "distinguished from an empty one")
+    if base.get("read_ok") is not True:
+        raise ParseRefused(
+            "baseline read did not succeed; an unreadable provider surface "
+            "is not an empty one")
+    if not base.get("baseline_id"):
+        raise ParseRefused(
+            "baseline is not durable: a caller-supplied dict shaped like a "
+            "baseline is not a captured one")
     return base
 
-RUN_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+#: A run id is only a run id where the provider labels it as one.
+#:
+#: A bare UUID pattern over the whole body picked up seven "run ids" from
+#: the real #8 sticky, two of which are the RFC 4122 example UUIDs quoted
+#: inside the reviewed diff. Content under review could therefore
+#: manufacture the identifiers used to prove that a review happened, which
+#: is the same defect one layer further out: text that looks like evidence
+#: being read as evidence.
+RUN_ID = re.compile(
+    r"\*\*Run ID\*\*:\s*`([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+    r"[0-9a-f]{4}-[0-9a-f]{12})`", re.I)
+BARE_UUID = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
 
 SKIP_MARKERS = ("skip review", "does not receive automatic reviews",
@@ -115,17 +136,44 @@ def baseline(comments, *, provider_app):
     }
 
 
-def _findings_from_coderabbit(body):
+SKIP_BLOCK = re.compile(
+    r"<!--\s*This is an auto-generated comment: skip review.*?"
+    r"<!--\s*end of auto-generated comment: skip review[^>]*-->",
+    re.S | re.I)
+RANGE = re.compile(r"between\s+([0-9a-f]{40})\s+and\s+([0-9a-f]{40})", re.I)
+
+
+def split_run_blocks(body):
+    """Separate the sticky into the blocks it actually contains.
+
+    Observed on the real #8 sticky: a skip block for run a3d2af24 sits
+    above a completed review for run a765cb7e, in one comment. Evaluating
+    the whole body meant the older skip marker decided `review_ran` for a
+    review that had run — fail-closed, but wrong about what happened, and
+    a clean review would never have qualified.
+    """
+    skipped_runs = []
+    remainder = body
+    for match in SKIP_BLOCK.finditer(body):
+        skipped_runs.extend(RUN_ID.findall(match.group(0)))
+    remainder = SKIP_BLOCK.sub("", body)
+    return {"skipped_run_ids": sorted(set(skipped_runs)),
+            "review_text": remainder,
+            "review_run_ids": sorted(set(RUN_ID.findall(remainder)))}
+
+
+def _findings_from_review_block(text):
     """Actionable comments, from the structure rather than from a phrase.
 
-    'Review completed' and 'status: success' describe the run. The count
-    lives in the actionable-comments line, and its absence is not zero.
+    "Review completed" and "status: success" describe the run. Two shapes
+    carry the result, and the absence of both is not zero.
     """
-    match = re.search(r"actionable comments?\D{0,20}?(\d+)", body, re.I)
+    if re.search(r"no actionable comments", text, re.I):
+        return []
+    match = re.search(r"actionable comments?\D{0,20}?(\d+)", text, re.I)
     if not match:
         return None
-    count = int(match.group(1))
-    return [{"kind": "actionable"} for _ in range(count)]
+    return [{"kind": "actionable"} for _ in range(int(match.group(1)))]
 
 
 def parse_coderabbit(raw_comments, *, base, requested_head, generation):
@@ -135,31 +183,47 @@ def parse_coderabbit(raw_comments, *, base, requested_head, generation):
         reject_synthetic(c)
     mine = [c for c in raw_comments
             if (c.get("user") or {}).get("login") == "coderabbitai[bot]"]
+    known = set(base["payload"]["run_ids"] if "payload" in base
+                else base["run_ids"])
     for c in sorted(mine, key=lambda c: c.get("updated_at") or ""):
         body = c.get("body") or ""
-        runs = set(RUN_ID.findall(body))
-        new_runs = sorted(runs - set(base["run_ids"]))
-        rewritten = (c["id"] in base["digests"]
-                     and body_digest(body) != base["digests"][c["id"]])
-        is_new_carrier = c["id"] not in base["carrier_ids"]
-        if not new_runs:
-            continue                      # nothing here that we caused
+        blocks = split_run_blocks(body)
+        # A skip block belongs to its own run and cannot speak for another.
+        new_review_runs = sorted(set(blocks["review_run_ids"]) - known)
+        if not new_review_runs:
+            continue
+        digests = base["payload"]["digests"] if "payload" in base else base["digests"]
+        carriers = base["payload"]["carrier_ids"] if "payload" in base else base["carrier_ids"]
+        rewritten = (str(c["id"]) in {str(k) for k in digests}
+                     and body_digest(body) != digests.get(
+                         c["id"], digests.get(str(c["id"]))))
+        is_new_carrier = c["id"] not in carriers
         if not (rewritten or is_new_carrier):
             continue
-        low = body.lower()
-        heads = SHA40.findall(body)
+        if len(new_review_runs) > 1:
+            return {"ambiguous": True, "id": c["id"], "provider": "coderabbit",
+                    "new_run_ids": new_review_runs, "generation": generation,
+                    "cause": "several new review runs in one carrier; the "
+                             "applicable one is not determined"}
+        text = blocks["review_text"]
+        low = text.lower()
+        rng = RANGE.search(text)
         return {
             "id": c["id"], "provider": "coderabbit",
             "created_at": c.get("created_at"),
             "updated_at": c.get("updated_at"),
-            "body": body,
-            "head_claim": requested_head if requested_head in heads else None,
+            "body": text,
+            "reviewed_range": {"from": rng.group(1), "to": rng.group(2)} if rng else None,
+            # The head is attested by the *end of the reviewed range*, not
+            # by a SHA appearing anywhere in the comment.
+            "head_claim": (rng.group(2) if rng and rng.group(2) == requested_head
+                           else None),
             "generation": generation,
-            "new_run_ids": new_runs,
+            "new_run_ids": new_review_runs,
+            "skipped_run_ids": blocks["skipped_run_ids"],
             "carrier_was_rewritten": rewritten,
-            "review_ran": not any(m in low for m in SKIP_MARKERS)
-                          and not any(m in low for m in RATE_MARKERS),
-            "findings": _findings_from_coderabbit(body),
+            "review_ran": not any(m in low for m in RATE_MARKERS),
+            "findings": _findings_from_review_block(text),
         }
     return None
 
