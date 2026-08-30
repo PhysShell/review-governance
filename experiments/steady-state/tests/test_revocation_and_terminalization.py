@@ -385,3 +385,48 @@ def test_an_open_pr_is_never_terminalized(tmp_path, store, fresh):
     assert result["terminalized"] == []
     assert store.acceptance(acc["acceptance_id"])["state"] == rounds.ACCEPTED
     epochs.close()
+
+
+# --- D. the cause is durable, not a return value -----------------------------
+
+def test_the_terminal_transition_records_what_was_observed(store, fresh):
+    """`state` proves terminality; it does not prove why. The cause used to
+    live in a function's return value, which is evidence for as long as
+    somebody keeps the log."""
+    acc = accept(store, fresh)
+    store.terminalize(REPO, 32, cause="PR_CLOSED", observed_pr_state="closed",
+                      observed_merged=False)
+    rows = store.transitions_for(acc["acceptance_id"])
+    assert len(rows) == 1
+    t = rows[0]
+    assert (t["from_state"], t["to_state"]) == (rounds.ACCEPTED,
+                                                rounds.TERMINATED)
+    assert t["cause"] == "PR_CLOSED"
+    assert t["observed_pr_state"] == "closed"
+    assert t["observed_merged"] == 0
+    assert t["head_sha"] == A
+
+
+def test_a_head_move_also_records_its_cause(store, fresh):
+    acc = accept(store, fresh)
+    store.invalidate_for_head_move(REPO, 32, B)
+    t = store.transitions_for(acc["acceptance_id"])[0]
+    assert t["to_state"] == rounds.INVALIDATED and t["cause"] == "HEAD_MOVED"
+
+
+def test_a_recorded_transition_cannot_be_rewritten(store, fresh):
+    import sqlite3
+    acc = accept(store, fresh)
+    store.terminalize(REPO, 32, cause="PR_CLOSED")
+    with pytest.raises(sqlite3.IntegrityError):
+        store.conn.execute("UPDATE acceptance_transitions SET cause='x'")
+    with pytest.raises(sqlite3.IntegrityError):
+        store.conn.execute("DELETE FROM acceptance_transitions")
+
+
+def test_the_loop_reports_a_pass_that_ended_an_acceptance():
+    """A terminalizing pass writes nothing, so the old emit condition would
+    have let the transition go past in silence."""
+    import inspect
+    source = inspect.getsource(runtime.main)
+    assert 'result.get("terminalized")' in source

@@ -143,8 +143,11 @@ def pass_once(request, repo, base, store, write_enabled=True,
             if pull.get("state") == "open":
                 continue
             ended = round_store.terminalize(
-                repo, pr, cause=f"PR_{pull['state'].upper()}"
-                + ("_MERGED" if pull.get("merged") else ""))
+                repo, pr,
+                cause=f"PR_{pull['state'].upper()}"
+                      + ("_MERGED" if pull.get("merged") else ""),
+                observed_pr_state=pull["state"],
+                observed_merged=bool(pull.get("merged")))
             terminalized.append({"pr_number": pr, "pr_state": pull["state"],
                                  "merged": bool(pull.get("merged")),
                                  "acceptances": ended})
@@ -244,7 +247,11 @@ def main():
             if result["state"] == "OK" and not args.dry_run:
                 write_health(args.health_file, result)
                 write_reconciliation_health(args.reconciliation_health, result)
-            if result.get("writes"):
+            # A pass that ends an acceptance is as reportable as one that
+            # writes a carrier. Without this the transition that proves a
+            # cleanup happened would go past silently, and the cause would
+            # survive only in a return value nobody kept.
+            if result.get("writes") or result.get("terminalized"):
                 print(json.dumps(result, default=str), flush=True)
             time.sleep(args.interval)
         return 0

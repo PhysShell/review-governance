@@ -78,6 +78,25 @@ CREATE TABLE IF NOT EXISTS provider_requests (
     outcome_recorded_at  TEXT,
     UNIQUE (acceptance_id, provider, generation)
 );
+CREATE TABLE IF NOT EXISTS acceptance_transitions (
+    transition_id      TEXT PRIMARY KEY,
+    acceptance_id      TEXT NOT NULL,
+    repo               TEXT NOT NULL,
+    pr_number          INTEGER NOT NULL,
+    head_sha           TEXT NOT NULL,
+    from_state         TEXT NOT NULL,
+    to_state           TEXT NOT NULL,
+    cause              TEXT NOT NULL,
+    observed_pr_state  TEXT,
+    observed_merged    INTEGER,
+    at                 TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS transitions_immutable_update
+BEFORE UPDATE ON acceptance_transitions
+BEGIN SELECT RAISE(ABORT, 'a recorded transition cannot be rewritten'); END;
+CREATE TRIGGER IF NOT EXISTS transitions_immutable_delete
+BEFORE DELETE ON acceptance_transitions
+BEGIN SELECT RAISE(ABORT, 'transitions are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS observations_no_update
 BEFORE UPDATE ON observations
 BEGIN SELECT RAISE(ABORT, 'an observation records what was read and cannot be rewritten'); END;
@@ -384,7 +403,36 @@ class RoundStore:
                 if a["head_sha"] == head_sha and a["state"] == ACCEPTED]
         return rows[-1] if rows else None
 
-    def terminalize(self, repo, pr_number, *, cause, at=None):
+    def _record_transition(self, acceptance, *, to_state, cause, at,
+                           observed_pr_state=None, observed_merged=None):
+        """Why a state moved, stored beside the fact that it did.
+
+        `state` alone proves terminality and not its cause. A6g-c1 left the
+        cause in a function's return value, which is evidence for exactly as
+        long as somebody keeps the log — so the transition is durable and
+        carries what was observed when it was made.
+        """
+        tid = _ident("tr-", {"acc": acceptance["acceptance_id"],
+                             "to": to_state, "at": at, "cause": cause})
+        self.conn.execute(
+            "INSERT INTO acceptance_transitions (transition_id, acceptance_id,"
+            " repo, pr_number, head_sha, from_state, to_state, cause,"
+            " observed_pr_state, observed_merged, at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (tid, acceptance["acceptance_id"], acceptance["repo"],
+             int(acceptance["pr_number"]), acceptance["head_sha"],
+             acceptance["state"], to_state, cause, observed_pr_state,
+             None if observed_merged is None else int(bool(observed_merged)),
+             at))
+        return tid
+
+    def transitions_for(self, acceptance_id):
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM acceptance_transitions WHERE acceptance_id=? "
+            "ORDER BY rowid", (acceptance_id,))]
+
+    def terminalize(self, repo, pr_number, *, cause, at=None,
+                    observed_pr_state=None, observed_merged=None):
         """End every standing acceptance for a PR that is no longer eligible.
 
         Established from observed GitHub state by the caller that read it,
@@ -397,14 +445,22 @@ class RoundStore:
         at = at or utcnow()
         standing = [a for a in self.acceptances_for(repo, pr_number)
                     if a["state"] == ACCEPTED]
+        out = []
         for a in standing:
+            tid = self._record_transition(
+                a, to_state=TERMINATED, cause=cause, at=at,
+                observed_pr_state=observed_pr_state,
+                observed_merged=observed_merged)
             self.conn.execute(
                 "UPDATE acceptances SET state=? WHERE acceptance_id=?",
                 (TERMINATED, a["acceptance_id"]))
+            out.append({"acceptance_id": a["acceptance_id"],
+                        "was_for_head": a["head_sha"], "state": TERMINATED,
+                        "cause": cause, "transition_id": tid,
+                        "observed_pr_state": observed_pr_state,
+                        "observed_merged": observed_merged, "at": at})
         self.conn.commit()
-        return [{"acceptance_id": a["acceptance_id"], "was_for_head": a["head_sha"],
-                 "state": TERMINATED, "cause": cause, "at": at}
-                for a in standing]
+        return out
 
     def prs_with_standing_acceptances(self, repo):
         return sorted({a["pr_number"] for a in self.conn.execute(
@@ -421,14 +477,20 @@ class RoundStore:
         at = at or utcnow()
         stale = [a for a in self.acceptances_for(repo, pr_number)
                  if a["state"] == ACCEPTED and a["head_sha"] != current_head]
+        out = []
         for a in stale:
+            tid = self._record_transition(
+                a, to_state=INVALIDATED, cause="HEAD_MOVED", at=at,
+                observed_pr_state="open")
             self.conn.execute(
                 "UPDATE acceptances SET state=? WHERE acceptance_id=?",
                 (INVALIDATED, a["acceptance_id"]))
+            out.append({"acceptance_id": a["acceptance_id"],
+                        "was_for_head": a["head_sha"],
+                        "current_head": current_head, "state": INVALIDATED,
+                        "transition_id": tid, "at": at})
         self.conn.commit()
-        return [{"acceptance_id": a["acceptance_id"],
-                 "was_for_head": a["head_sha"], "current_head": current_head,
-                 "state": INVALIDATED, "at": at} for a in stale]
+        return out
 
     # --- provider requests -------------------------------------------------
     def record_intent(self, *, acceptance_id, repo, pr_number, provider,
